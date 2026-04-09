@@ -4,7 +4,7 @@
 > Trained on **RAVDESS** · 8 emotion classes · ~65–70% test accuracy (SVM, 5-fold CV)
 
 <!-- Replace YOUR_USERNAME with your HuggingFace username once deployed -->
-[![Open in Spaces](https://huggingface.co/datasets/huggingface/badges/resolve/main/open-in-hf-spaces-sm.svg)](https://huggingface.co/spaces/YOUR_USERNAME/stress-detection)
+[![Open in Spaces](https://huggingface.co/datasets/huggingface/badges/resolve/main/open-in-hf-spaces-sm.svg)](https://huggingface.co/spaces/tejaswaghere/stress-detection)
 [![GitHub Pages Demo](https://img.shields.io/badge/Live_Demo-GitHub_Pages-6c63ff?style=flat-square)](https://tejaswaghere.github.io/stress-detection-using-voice-analysis/demo/)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue?style=flat-square)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
