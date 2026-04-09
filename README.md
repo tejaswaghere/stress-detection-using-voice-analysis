@@ -3,7 +3,9 @@
 Detect emotions from voice recordings using classic ML and deep audio features.  
 Trained on the **RAVDESS** dataset · 8 emotion classes · ~65–70% test accuracy
 
-**[Try the live demo →](https://YOUR_USERNAME.github.io/stress-detection/demo/)**  
+## 🚀 Live Demo
+👉 https://tejaswaghere.github.io/stress-detection-using-voice-analysis/demo/
+
 _(Upload audio or pick a preset sample — runs entirely in your browser, no Python needed)_
 
 ---
