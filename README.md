@@ -22,7 +22,7 @@ Stress and emotion are encoded in the acoustic properties of speech — pitch, e
 | Demo | What it does |
 |---|---|
 | **[Browser Demo ↗](https://tejaswaghere.github.io/stress-detection-using-voice-analysis/demo/)** | Record mic or upload audio — runs entirely in your browser, no Python |
-| **[HuggingFace Spaces ↗](https://huggingface.co/spaces/YOUR_USERNAME/stress-detection)** | Full Python inference with the trained SVM model via Gradio |
+| **[HuggingFace Spaces ↗](https://huggingface.co/spaces/tejaswaghere/stress-detection)** | Full Python inference with the trained SVM model via Gradio |
 
 ---
 
