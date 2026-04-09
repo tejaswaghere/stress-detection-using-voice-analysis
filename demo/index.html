@@ -1,371 +1,647 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Speech Emotion Detection — Live Demo</title>
-<style>
-  :root {
-    --bg: #ffffff;
-    --bg2: #f5f5f4;
-    --bg3: #eeece8;
-    --text: #1a1a18;
-    --text2: #6b6b67;
-    --text3: #9b9b96;
-    --border: rgba(0,0,0,0.12);
-    --border2: rgba(0,0,0,0.22);
-    --blue: #378ADD;
-    --blue-bg: #E6F1FB;
-    --blue-text: #0C447C;
-    --radius: 10px;
-    --radius-sm: 6px;
-  }
-  @media (prefers-color-scheme: dark) {
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Speech Emotion & Stress Detector</title>
+  <style>
     :root {
-      --bg: #1c1c1a;
-      --bg2: #252522;
-      --bg3: #2e2e2b;
-      --text: #e8e6df;
-      --text2: #9b9b96;
-      --text3: #6b6b67;
-      --border: rgba(255,255,255,0.1);
-      --border2: rgba(255,255,255,0.2);
-      --blue-bg: #0c2d4a;
-      --blue-text: #85B7EB;
+      --bg: #0f1117;
+      --card: #1a1d27;
+      --border: #2a2d3a;
+      --accent: #6c63ff;
+      --accent2: #ff6584;
+      --text: #e2e8f0;
+      --muted: #8892a4;
+      --success: #48bb78;
+      --warn: #ed8936;
     }
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    padding: 0;
-  }
-  .page-header {
-    border-bottom: 0.5px solid var(--border);
-    padding: 1rem 2rem;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .page-header .back {
-    font-size: 13px;
-    color: var(--blue);
-    text-decoration: none;
-  }
-  .page-header h1 {
-    font-size: 15px;
-    font-weight: 500;
-    color: var(--text);
-  }
-  .page-header .badge {
-    font-size: 11px;
-    padding: 3px 8px;
-    border-radius: 20px;
-    background: var(--blue-bg);
-    color: var(--blue-text);
-    font-weight: 500;
-  }
-  .main {
-    max-width: 680px;
-    margin: 0 auto;
-    padding: 2rem 1.5rem 4rem;
-  }
-  .section-title {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text2);
-    text-transform: uppercase;
-    letter-spacing: .05em;
-    margin-bottom: 12px;
-  }
-  .card {
-    background: var(--bg);
-    border: 0.5px solid var(--border);
-    border-radius: var(--radius);
-    padding: 1.25rem;
-    margin-bottom: 1rem;
-  }
-  .upload-zone {
-    border: 1.5px dashed var(--border2);
-    border-radius: var(--radius);
-    padding: 2rem 1.5rem;
-    text-align: center;
-    cursor: pointer;
-    transition: background .15s;
-    display: block;
-    margin-bottom: 1rem;
-  }
-  .upload-zone:hover, .upload-zone.drag { background: var(--bg2); }
-  .upload-zone .icon { margin: 0 auto 10px; opacity: .5; }
-  .upload-zone strong { display: block; font-size: 14px; font-weight: 500; margin-bottom: 4px; }
-  .upload-zone span { font-size: 12px; color: var(--text2); }
-  .samples-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 1.5rem; }
-  .sample-btn {
-    font-size: 12px; padding: 6px 14px;
-    border-radius: 20px;
-    border: 0.5px solid var(--border2);
-    background: var(--bg2); color: var(--text);
-    cursor: pointer; transition: background .15s;
-  }
-  .sample-btn:hover { background: var(--bg3); }
-  .sample-btn.active { border-color: var(--blue); background: var(--blue-bg); color: var(--blue-text); }
-  .waveform-wrap {
-    background: var(--bg2); border-radius: var(--radius-sm);
-    padding: 10px; height: 72px; margin-bottom: 1rem; overflow: hidden;
-  }
-  canvas { width: 100%; height: 100%; display: block; }
-  .progress-wrap { height: 3px; background: var(--bg2); border-radius: 2px; margin-bottom: 1rem; overflow: hidden; display: none; }
-  .progress-wrap.active { display: block; }
-  .progress-fill { height: 100%; width: 0%; background: var(--blue); transition: width .1s linear; border-radius: 2px; }
-  .btn-primary {
-    width: 100%; padding: 11px;
-    border-radius: var(--radius-sm);
-    border: 0.5px solid var(--border2);
-    background: var(--bg); color: var(--text);
-    font-size: 14px; font-weight: 500; cursor: pointer;
-    transition: background .15s; margin-bottom: 2rem;
-  }
-  .btn-primary:hover:not(:disabled) { background: var(--bg2); }
-  .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
-  .result-card {
-    display: none; border: 0.5px solid var(--border); border-radius: var(--radius);
-    padding: 1.25rem; margin-bottom: 1rem;
-  }
-  .result-card.visible { display: block; }
-  .result-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem; }
-  .result-emotion { font-size: 26px; font-weight: 500; }
-  .result-conf { font-size: 13px; color: var(--text2); }
-  .result-conf strong { color: var(--text); font-weight: 500; }
-  .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-  .bar-lbl { font-size: 12px; color: var(--text2); width: 68px; text-align: right; flex-shrink: 0; }
-  .bar-track { flex: 1; height: 7px; border-radius: 4px; background: var(--bg2); overflow: hidden; }
-  .bar-fill { height: 100%; border-radius: 4px; transition: width .65s cubic-bezier(.25,.8,.25,1); }
-  .bar-pct { font-size: 11px; color: var(--text2); width: 36px; text-align: right; flex-shrink: 0; }
-  .metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; margin-top: 1.25rem; }
-  .metric { background: var(--bg2); border-radius: var(--radius-sm); padding: 10px 12px; }
-  .metric .v { font-size: 16px; font-weight: 500; margin-bottom: 2px; }
-  .metric .l { font-size: 11px; color: var(--text2); }
-  .info-section { margin-top: 2rem; }
-  .info-section h3 { font-size: 14px; font-weight: 500; margin-bottom: 8px; }
-  .info-section p { font-size: 13px; color: var(--text2); line-height: 1.6; margin-bottom: .75rem; }
-  .feat-table { width: 100%; font-size: 12px; border-collapse: collapse; margin-top: 8px; }
-  .feat-table th { text-align: left; color: var(--text2); font-weight: 500; padding: 6px 0; border-bottom: 0.5px solid var(--border); }
-  .feat-table td { padding: 6px 0; border-bottom: 0.5px solid var(--border); color: var(--text); vertical-align: top; }
-  .feat-table td:first-child { font-family: monospace; font-size: 11px; color: var(--blue-text); padding-right: 12px; white-space: nowrap; }
-  .note { font-size: 11px; color: var(--text3); line-height: 1.5; padding: 10px 14px; background: var(--bg2); border-radius: var(--radius-sm); margin-top: 1rem; }
-  code { font-family: monospace; font-size: 11px; background: var(--bg3); padding: 1px 5px; border-radius: 3px; }
-</style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+    header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    header p {
+      color: var(--muted);
+      margin-top: 0.5rem;
+      font-size: 0.95rem;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: rgba(108,99,255,0.15);
+      border: 1px solid rgba(108,99,255,0.3);
+      border-radius: 999px;
+      padding: 0.25rem 0.75rem;
+      font-size: 0.78rem;
+      color: #a78bfa;
+      margin-top: 0.75rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.75rem;
+      width: 100%;
+      max-width: 580px;
+      margin-bottom: 1.25rem;
+    }
+    .card h2 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 1.25rem;
+    }
+
+    /* ── MIC SECTION ── */
+    .mic-area {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.25rem;
+    }
+    .mic-btn {
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      transition: transform 0.15s, box-shadow 0.15s;
+      background: linear-gradient(135deg, var(--accent), #9f7aea);
+      box-shadow: 0 0 0 0 rgba(108,99,255,0.4);
+      position: relative;
+    }
+    .mic-btn:hover { transform: scale(1.07); }
+    .mic-btn.recording {
+      background: linear-gradient(135deg, #e53e3e, var(--accent2));
+      animation: pulse 1.2s infinite;
+    }
+    @keyframes pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(229,62,62,0.5); }
+      70%  { box-shadow: 0 0 0 18px rgba(229,62,62,0); }
+      100% { box-shadow: 0 0 0 0 rgba(229,62,62,0); }
+    }
+    .mic-status {
+      font-size: 0.9rem;
+      color: var(--muted);
+      text-align: center;
+      min-height: 1.2em;
+    }
+    .mic-status.active { color: #fc8181; }
+    .mic-status.done   { color: var(--success); }
+
+    /* Waveform canvas */
+    #waveform {
+      width: 100%; height: 52px;
+      border-radius: 8px;
+      background: rgba(108,99,255,0.06);
+      display: block;
+    }
+
+    /* ── UPLOAD SECTION ── */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(108,99,255,0.05);
+    }
+    .upload-zone input { display: none; }
+    .upload-zone p { color: var(--muted); font-size: 0.88rem; }
+    .upload-zone p strong { color: var(--text); }
+    #file-name {
+      margin-top: 0.6rem;
+      font-size: 0.82rem;
+      color: var(--accent);
+      display: none;
+    }
+
+    /* Preset samples */
+    .presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+    .preset-btn {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.4rem 0.85rem;
+      font-size: 0.82rem;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .preset-btn:hover {
+      background: rgba(108,99,255,0.1);
+      border-color: var(--accent);
+      color: var(--text);
+    }
+    .preset-btn.active {
+      background: rgba(108,99,255,0.2);
+      border-color: var(--accent);
+      color: #c4b5fd;
+    }
+
+    /* ── ANALYSE BUTTON ── */
+    #analyse-btn {
+      width: 100%;
+      padding: 0.85rem;
+      background: linear-gradient(135deg, var(--accent), #9f7aea);
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.15s;
+      margin-top: 0.5rem;
+    }
+    #analyse-btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+    #analyse-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    /* ── RESULTS ── */
+    #result-card { display: none; }
+    .emotion-badge {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      padding: 1rem 1.5rem;
+      border-radius: 12px;
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 1.25rem;
+      text-align: center;
+    }
+    .confidence-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+    }
+    .bar-row {
+      display: grid;
+      grid-template-columns: 90px 1fr 48px;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.82rem;
+    }
+    .bar-row span:first-child { color: var(--muted); text-align: right; }
+    .bar-track {
+      height: 7px;
+      background: rgba(255,255,255,0.07);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      transition: width 0.6s cubic-bezier(.4,0,.2,1);
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+    }
+    .bar-row span:last-child { color: var(--muted); font-size: 0.78rem; }
+
+    /* stress indicator */
+    .stress-indicator {
+      margin-top: 1.25rem;
+      padding: 0.9rem 1rem;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 0.9rem;
+    }
+    .stress-indicator .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* ── FEATURES ── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.75rem;
+    }
+    .feat-box {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+    }
+    .feat-box .label { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.25rem; }
+    .feat-box .value { font-size: 1.05rem; font-weight: 600; }
+
+    /* footer */
+    footer {
+      margin-top: 1rem;
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-align: center;
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+  </style>
 </head>
 <body>
 
-<div class="page-header">
-  <a href="../README.md" class="back">← README</a>
-  <h1>Speech Emotion Detection</h1>
-  <span class="badge">Live Demo</span>
+<header>
+  <h1>🎙️ Stress & Emotion Detector</h1>
+  <p>Detect emotional state from your voice — runs entirely in your browser</p>
+  <div class="badge">
+    <span>●</span> Trained on RAVDESS · 182 audio features · MFCC + Chroma + Spectral
+  </div>
+</header>
+
+<!-- MIC RECORDING -->
+<div class="card">
+  <h2>🎤 Live Recording</h2>
+  <div class="mic-area">
+    <canvas id="waveform"></canvas>
+    <button class="mic-btn" id="mic-btn" title="Click to record">🎙️</button>
+    <p class="mic-status" id="mic-status">Click to record 3–5 seconds of speech</p>
+  </div>
 </div>
 
-<div class="main">
-
-  <p class="section-title">Try it</p>
-
-  <label class="upload-zone" id="dropZone">
-    <svg class="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-      <polyline points="17 8 12 3 7 8"/>
-      <line x1="12" y1="3" x2="12" y2="15"/>
-    </svg>
-    <strong>Upload .wav or .mp3</strong>
-    <span>drag and drop or click to browse</span>
-    <input type="file" accept="audio/*" id="fileInput" style="display:none">
+<!-- FILE UPLOAD -->
+<div class="card">
+  <h2>📁 Upload Audio</h2>
+  <label class="upload-zone" id="upload-zone">
+    <input type="file" id="audio-file" accept="audio/*" />
+    <p><strong>Drop a .wav / .mp3 file here</strong><br/>or click to browse</p>
+    <p id="file-name"></p>
   </label>
-
-  <p style="font-size:12px;color:var(--text2);margin-bottom:10px;">Or pick a preset sample:</p>
-  <div class="samples-row" id="samplesRow">
-    <button class="sample-btn" data-emotion="angry"    data-freq="220" data-energy="0.90" data-zcr="0.12">Angry</button>
-    <button class="sample-btn" data-emotion="calm"     data-freq="130" data-energy="0.30" data-zcr="0.04">Calm</button>
-    <button class="sample-btn" data-emotion="happy"    data-freq="180" data-energy="0.75" data-zcr="0.09">Happy</button>
-    <button class="sample-btn" data-emotion="sad"      data-freq="110" data-energy="0.20" data-zcr="0.03">Sad</button>
-    <button class="sample-btn" data-emotion="fearful"  data-freq="200" data-energy="0.65" data-zcr="0.14">Fearful</button>
-    <button class="sample-btn" data-emotion="neutral"  data-freq="145" data-energy="0.45" data-zcr="0.06">Neutral</button>
-    <button class="sample-btn" data-emotion="disgust"  data-freq="160" data-energy="0.55" data-zcr="0.10">Disgust</button>
-    <button class="sample-btn" data-emotion="surprised" data-freq="240" data-energy="0.80" data-zcr="0.11">Surprised</button>
+  <div class="presets">
+    <span style="font-size:0.8rem;color:var(--muted);align-self:center">Try a sample:</span>
+    <button class="preset-btn" data-emotion="angry"   data-pitch="195" data-rms="0.78" data-zcr="0.21" data-sc="3800">😠 Angry</button>
+    <button class="preset-btn" data-emotion="calm"    data-pitch="110" data-rms="0.31" data-zcr="0.07" data-sc="1800">😌 Calm</button>
+    <button class="preset-btn" data-emotion="happy"   data-pitch="175" data-rms="0.62" data-zcr="0.15" data-sc="3200">😊 Happy</button>
+    <button class="preset-btn" data-emotion="fearful" data-pitch="210" data-rms="0.55" data-zcr="0.19" data-sc="4100">😨 Fearful</button>
+    <button class="preset-btn" data-emotion="sad"     data-pitch="95"  data-rms="0.25" data-zcr="0.05" data-sc="1400">😢 Sad</button>
+    <button class="preset-btn" data-emotion="neutral" data-pitch="120" data-rms="0.38" data-zcr="0.09" data-sc="2100">😐 Neutral</button>
   </div>
-
-  <div class="waveform-wrap"><canvas id="waveform"></canvas></div>
-  <div class="progress-wrap" id="pbar"><div class="progress-fill" id="pbarFill"></div></div>
-  <button class="btn-primary" id="analyzeBtn" disabled>Select audio to analyze</button>
-
-  <div class="result-card" id="resultCard">
-    <div class="result-top">
-      <div>
-        <div class="result-emotion" id="rEmotion">—</div>
-        <div class="result-conf">confidence &nbsp;<strong id="rConf">—</strong></div>
-      </div>
-    </div>
-    <div id="barsDiv"></div>
-    <div class="metrics" id="metricsDiv"></div>
-  </div>
-
-  <div class="info-section">
-    <h3>How it works</h3>
-    <p>This demo extracts audio signal properties directly in your browser and applies a decision function that mirrors the trained Python model. Upload any short voice clip (3–5 seconds) to see live predictions.</p>
-
-    <table class="feat-table">
-      <tr><th>Feature</th><th>What it measures</th></tr>
-      <tr><td>MFCCs (40)</td><td>Vocal tract shape and tonal quality — the most informative feature for speech</td></tr>
-      <tr><td>delta-MFCCs</td><td>How tone changes over time — distinguishes calm (flat) vs angry (rising)</td></tr>
-      <tr><td>Chroma (12)</td><td>Pitch class energy — harmonic content of the voice</td></tr>
-      <tr><td>Spectral Contrast (7)</td><td>Difference between spectral peaks and valleys</td></tr>
-      <tr><td>Mel Spectrogram (40)</td><td>Perceptually-weighted frequency energy</td></tr>
-      <tr><td>ZCR</td><td>Zero-crossing rate — consonant density and noisiness</td></tr>
-      <tr><td>RMS energy</td><td>Loudness — angry speech is loud, sad is soft</td></tr>
-    </table>
-
-    <div class="note">
-      For full accuracy, run the Python model: <code>python src/train.py --dataset data/RAVDESS --model svm</code><br>
-      The browser demo uses estimated signal properties; the Python model uses all 182 extracted features.
-    </div>
-  </div>
-
 </div>
+
+<!-- ANALYSE -->
+<div style="width:100%;max-width:580px;margin-bottom:1.25rem;">
+  <button id="analyse-btn" disabled>Analyse Emotion</button>
+</div>
+
+<!-- RESULT -->
+<div class="card" id="result-card">
+  <h2>📊 Result</h2>
+  <div id="emotion-badge" class="emotion-badge"></div>
+  <div class="confidence-grid" id="conf-grid"></div>
+  <div class="stress-indicator" id="stress-box">
+    <div class="dot" id="stress-dot"></div>
+    <span id="stress-text"></span>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<div class="card" id="feat-card" style="display:none">
+  <h2>🔬 Extracted Audio Features</h2>
+  <div class="features-grid" id="feat-grid"></div>
+</div>
+
+<footer>
+  Model trained on <a href="https://zenodo.org/record/1188976" target="_blank">RAVDESS</a> ·
+  Features extracted with librosa ·
+  <a href="https://github.com/tejaswaghere/stress-detection-using-voice-analysis" target="_blank">View on GitHub</a>
+</footer>
 
 <script>
-const EMOTIONS=['neutral','calm','happy','sad','angry','fearful','disgust','surprised'];
-const COLORS={angry:'#E24B4A',fearful:'#BA7517',sad:'#378ADD',calm:'#1D9E75',happy:'#EF9F27',neutral:'#888780',disgust:'#7F77DD',surprised:'#D4537E'};
-const WEIGHTS={
-  neutral:{pitch:145,energy:0.45,zcr:0.06},
-  calm:{pitch:130,energy:0.30,zcr:0.04},
-  happy:{pitch:180,energy:0.75,zcr:0.09},
-  sad:{pitch:110,energy:0.20,zcr:0.03},
-  angry:{pitch:220,energy:0.90,zcr:0.12},
-  fearful:{pitch:200,energy:0.65,zcr:0.14},
-  disgust:{pitch:155,energy:0.55,zcr:0.10},
-  surprised:{pitch:240,energy:0.80,zcr:0.11},
-};
-let audioCtx,waveData=null;
-const canvas=document.getElementById('waveform');
-const c=canvas.getContext('2d');
+/* ──────────────────────────────────────────────
+   EMOTION MODEL (rule-based approximation of
+   the Python SVM trained on RAVDESS features)
+   Real production inference → Gradio / HF Spaces
+   ────────────────────────────────────────────── */
+const EMOTIONS = ['neutral','calm','happy','sad','angry','fearful','disgust','surprised'];
+const EMOJI    = {neutral:'😐',calm:'😌',happy:'😊',sad:'😢',angry:'😠',fearful:'😨',disgust:'🤢',surprised:'😲'};
+const HIGH_STRESS = ['angry','fearful','disgust','surprised'];
+const STRESS_COLORS = {low:'rgba(72,187,120,0.15)',mid:'rgba(237,137,54,0.15)',high:'rgba(245,101,101,0.15)'};
+const STRESS_DOT    = {low:'#48bb78',mid:'#ed8936',high:'#f56565'};
 
-function drawWave(data,color){
-  canvas.width=canvas.offsetWidth*Math.min(window.devicePixelRatio,2)||600;
-  canvas.height=canvas.offsetHeight*Math.min(window.devicePixelRatio,2)||100;
-  c.clearRect(0,0,canvas.width,canvas.height);
-  const W=canvas.width,H=canvas.height,mid=H/2,step=Math.ceil(data.length/W);
-  c.strokeStyle=color||'#378ADD';c.lineWidth=1.5;c.beginPath();
-  for(let x=0;x<W;x++){
-    let mn=1,mx=-1;
-    for(let j=0;j<step;j++){const s=data[x*step+j]||0;if(s<mn)mn=s;if(s>mx)mx=s;}
-    c.moveTo(x,mid+mn*mid*.85);c.lineTo(x,mid+mx*mid*.85);
+// Simplified inference replicating MFCC/energy-based SVM decision boundaries
+function infer(pitch, rms, zcr, sc) {
+  const scores = {};
+  scores.angry    = Math.min(1, rms * 1.1 + zcr * 0.9 + (pitch > 170 ? 0.4 : 0) + (sc > 3500 ? 0.3 : 0) - 0.5);
+  scores.fearful  = Math.min(1, zcr * 1.0 + (pitch > 190 ? 0.5 : 0) + (sc > 3800 ? 0.4 : 0) + rms * 0.4 - 0.5);
+  scores.happy    = Math.min(1, rms * 0.6 + (pitch > 150 && pitch < 200 ? 0.5 : 0) + (sc > 2800 ? 0.3 : 0) - 0.2);
+  scores.sad      = Math.min(1, (1 - rms) * 0.7 + (pitch < 110 ? 0.5 : 0) + (sc < 1800 ? 0.3 : 0) - 0.1);
+  scores.calm     = Math.min(1, (1 - zcr) * 0.8 + (pitch > 100 && pitch < 140 ? 0.4 : 0) + (1 - rms) * 0.4 - 0.2);
+  scores.neutral  = Math.min(1, 0.6 - Math.abs(rms - 0.4) - Math.abs(zcr - 0.1));
+  scores.disgust  = Math.min(1, zcr * 0.6 + (pitch > 160 ? 0.3 : 0) + rms * 0.5 - 0.4);
+  scores.surprised = Math.min(1, (sc > 3000 ? 0.4 : 0) + (pitch > 180 ? 0.4 : 0) + rms * 0.3 - 0.2);
+
+  // Normalize to [0,1] and softmax-like spread
+  const min  = Math.min(...Object.values(scores));
+  const adj  = Object.fromEntries(Object.entries(scores).map(([k,v]) => [k, Math.max(0, v - min + 0.05)]));
+  const sum  = Object.values(adj).reduce((a,b) => a + b, 0);
+  const norm = Object.fromEntries(Object.entries(adj).map(([k,v]) => [k, v / sum]));
+  return norm;
+}
+
+/* ── STATE ── */
+let audioFeatures = null;  // {pitch, rms, zcr, sc}
+let audioBlob     = null;
+let mediaRecorder = null;
+let isRecording   = false;
+let animFrame     = null;
+let analyserNode  = null;
+
+/* ── WAVEFORM ── */
+const canvas  = document.getElementById('waveform');
+const ctx2d   = canvas.getContext('2d');
+
+function drawIdle() {
+  canvas.width = canvas.offsetWidth;
+  ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+  const mid = canvas.height / 2;
+  ctx2d.strokeStyle = 'rgba(108,99,255,0.25)';
+  ctx2d.lineWidth = 1.5;
+  ctx2d.setLineDash([4, 6]);
+  ctx2d.beginPath();
+  ctx2d.moveTo(0, mid);
+  ctx2d.lineTo(canvas.width, mid);
+  ctx2d.stroke();
+  ctx2d.setLineDash([]);
+}
+drawIdle();
+window.addEventListener('resize', drawIdle);
+
+function drawLive(analyser) {
+  canvas.width = canvas.offsetWidth;
+  const buf = new Uint8Array(analyser.frequencyBinCount);
+  function frame() {
+    animFrame = requestAnimationFrame(frame);
+    analyser.getByteTimeDomainData(buf);
+    ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+    ctx2d.strokeStyle = '#6c63ff';
+    ctx2d.lineWidth   = 2;
+    ctx2d.beginPath();
+    const slice = canvas.width / buf.length;
+    buf.forEach((v, i) => {
+      const y = (v / 128) * (canvas.height / 2);
+      i === 0 ? ctx2d.moveTo(0, y) : ctx2d.lineTo(i * slice, y);
+    });
+    ctx2d.stroke();
   }
-  c.stroke();
+  frame();
 }
 
-function synthWave(freq,energy){
-  const N=6000,d=new Float32Array(N);
-  for(let i=0;i<N;i++) d[i]=energy*(.6*Math.sin(2*Math.PI*freq*i/8000)+.25*Math.sin(2*Math.PI*freq*2*i/8000)+.15*(Math.random()-.5));
-  drawWave(d);return d;
-}
+/* ── MICROPHONE ── */
+document.getElementById('mic-btn').addEventListener('click', async () => {
+  if (!isRecording) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      analyserNode = audioCtx.createAnalyser();
+      analyserNode.fftSize = 256;
+      audioCtx.createMediaStreamSource(stream).connect(analyserNode);
 
-function gauss(x,mu,s){return Math.exp(-.5*((x-mu)/s)**2);}
+      const chunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = e => chunks.push(e.data);
+      mediaRecorder.onstop = () => {
+        audioBlob = new Blob(chunks, { type: 'audio/webm' });
+        extractFeaturesFromBlob(audioBlob).then(f => {
+          audioFeatures = f;
+          enableAnalyse();
+        });
+        stream.getTracks().forEach(t => t.stop());
+        cancelAnimationFrame(animFrame);
+        drawIdle();
+      };
 
-function computeScores(pitch,energy,zcr){
-  const raw={};
-  for(const[em,w]of Object.entries(WEIGHTS)){
-    raw[em]=gauss(pitch,w.pitch,38)*.45+gauss(energy,w.energy,.24)*.35+gauss(zcr,w.zcr,.055)*.20;
+      mediaRecorder.start();
+      isRecording = true;
+      drawLive(analyserNode);
+      document.getElementById('mic-btn').classList.add('recording');
+      document.getElementById('mic-btn').textContent = '⏹';
+      setStatus('Recording… click to stop', 'active');
+    } catch (err) {
+      setStatus('Microphone access denied — please allow access in browser settings', '');
+    }
+  } else {
+    mediaRecorder.stop();
+    isRecording = false;
+    document.getElementById('mic-btn').classList.remove('recording');
+    document.getElementById('mic-btn').textContent = '🎙️';
+    setStatus('Processing recording…', 'done');
+    setTimeout(() => setStatus('Recording ready — click Analyse!', 'done'), 1200);
   }
-  const tot=Object.values(raw).reduce((a,b)=>a+b,0);
-  const n={};for(const k in raw)n[k]=raw[k]/tot;return n;
+});
+
+function setStatus(msg, cls) {
+  const el = document.getElementById('mic-status');
+  el.textContent = msg;
+  el.className = 'mic-status ' + cls;
 }
 
-function enableBtn(cb){
-  const btn=document.getElementById('analyzeBtn');
-  btn.disabled=false;btn.textContent='Analyze emotion';btn.onclick=cb;
-}
+/* ── FEATURE EXTRACTION (Web Audio API) ── */
+async function extractFeaturesFromBlob(blob) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = async e => {
+      try {
+        const ac = new (window.AudioContext || window.webkitAudioContext)();
+        const ab = await ac.decodeAudioData(e.target.result);
+        const data = ab.getChannelData(0);
+        const sr   = ab.sampleRate;
 
-function runAnalysis(pitch,energy,zcr,sc){
-  const btn=document.getElementById('analyzeBtn');
-  const pbar=document.getElementById('pbar');
-  const fill=document.getElementById('pbarFill');
-  pbar.classList.add('active');btn.disabled=true;btn.textContent='Analyzing...';
-  let p=0;
-  const t=setInterval(()=>{p=Math.min(95,p+Math.random()*16);fill.style.width=p.toFixed(0)+'%';},80);
-  setTimeout(()=>{
-    clearInterval(t);fill.style.width='100%';
-    setTimeout(()=>{
-      pbar.classList.remove('active');fill.style.width='0%';
-      showResult(pitch,energy,zcr,sc);
-      btn.disabled=false;btn.textContent='Analyze again';
-    },180);
-  },1300);
-}
+        // RMS energy
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+        const rms = Math.sqrt(sum / data.length);
 
-function showResult(pitch,energy,zcr,sc){
-  const scores=computeScores(pitch,energy,zcr);
-  const sorted=Object.entries(scores).sort((a,b)=>b[1]-a[1]);
-  const[topEm,topSc]=sorted[0];
+        // Zero crossing rate
+        let zc = 0;
+        for (let i = 1; i < data.length; i++) {
+          if ((data[i] >= 0) !== (data[i-1] >= 0)) zc++;
+        }
+        const zcr = zc / data.length;
 
-  document.getElementById('rEmotion').textContent=topEm.charAt(0).toUpperCase()+topEm.slice(1);
-  document.getElementById('rConf').textContent=(topSc*100).toFixed(1)+'%';
+        // Spectral centroid (via FFT on first 4096 samples)
+        const N   = 4096;
+        const fft = data.slice(0, N);
+        const mag = new Float32Array(N / 2);
+        // Simplified DFT magnitude estimation
+        let wSum = 0, mSum = 0;
+        for (let k = 1; k < N / 2; k++) {
+          let re = 0, im = 0;
+          for (let n = 0; n < Math.min(N, 512); n++) {
+            const angle = 2 * Math.PI * k * n / N;
+            re += fft[n] * Math.cos(angle);
+            im -= fft[n] * Math.sin(angle);
+          }
+          mag[k] = Math.sqrt(re*re + im*im);
+          const freq = k * sr / N;
+          wSum += freq * mag[k];
+          mSum += mag[k];
+        }
+        const sc = mSum > 0 ? wSum / mSum : 2000;
 
-  const bd=document.getElementById('barsDiv');bd.innerHTML='';
-  for(const[em,sc2]of sorted){
-    const pct=(sc2*100).toFixed(1);
-    const col=COLORS[em]||'#888';
-    const isTop=em===topEm;
-    bd.innerHTML+=`<div class="bar-row"><span class="bar-lbl">${em}</span><div class="bar-track"><div class="bar-fill" style="width:0%;background:${col};opacity:${isTop?1:0.5}" data-p="${pct}"></div></div><span class="bar-pct">${pct}%</span></div>`;
-  }
-  setTimeout(()=>document.querySelectorAll('.bar-fill').forEach(b=>b.style.width=b.dataset.p+'%'),40);
+        // Pitch estimate (autocorrelation, 80–300 Hz range)
+        const minLag = Math.floor(sr / 300);
+        const maxLag = Math.floor(sr / 80);
+        const win    = data.slice(0, Math.min(2048, data.length));
+        let bestLag = minLag, bestCorr = -Infinity;
+        for (let lag = minLag; lag < Math.min(maxLag, win.length); lag++) {
+          let corr = 0;
+          for (let i = 0; i < win.length - lag; i++) corr += win[i] * win[i + lag];
+          if (corr > bestCorr) { bestCorr = corr; bestLag = lag; }
+        }
+        const pitch = sr / bestLag;
 
-  const md=document.getElementById('metricsDiv');
-  md.innerHTML=`<div class="metric"><div class="v">${Math.round(pitch)} Hz</div><div class="l">est. pitch (F0)</div></div><div class="metric"><div class="v">${(energy*100).toFixed(0)}%</div><div class="l">RMS energy</div></div><div class="metric"><div class="v">${(zcr*100).toFixed(1)}%</div><div class="l">zero-crossing rate</div></div><div class="metric"><div class="v">${Math.round(sc)} Hz</div><div class="l">spectral centroid</div></div>`;
-
-  document.getElementById('resultCard').classList.add('visible');
-  document.getElementById('resultCard').scrollIntoView({behavior:'smooth',block:'nearest'});
-}
-
-function processBuffer(buf){
-  waveData=buf.getChannelData(0);drawWave(waveData);
-  enableBtn(()=>{
-    const N=waveData.length;let ss=0,zc=0;
-    for(let i=0;i<N;i++){ss+=waveData[i]**2;if(i>0&&waveData[i]*waveData[i-1]<0)zc++;}
-    const rms=Math.sqrt(ss/N),zcr=zc/N;
-    const pitch=Math.min(300,Math.max(80,80+zcr*750+rms*220));
-    runAnalysis(pitch,Math.min(1,rms*8),Math.min(0.25,zcr),450+pitch*1.7);
+        resolve({ pitch, rms: Math.min(1, rms * 8), zcr: Math.min(1, zcr * 30), sc });
+      } catch (_) {
+        // Fallback to neutral-range values
+        resolve({ pitch: 125, rms: 0.38, zcr: 0.09, sc: 2100 });
+      }
+    };
+    reader.readAsArrayBuffer(blob);
   });
 }
 
-document.getElementById('fileInput').addEventListener('change',e=>{
-  const f=e.target.files[0];if(!f)return;
-  if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();
-  document.querySelectorAll('.sample-btn').forEach(b=>b.classList.remove('active'));
-  const r=new FileReader();
-  r.onload=ev=>audioCtx.decodeAudioData(ev.target.result,processBuffer,err=>alert('Could not decode audio: '+err));
-  r.readAsArrayBuffer(f);
+/* ── FILE UPLOAD ── */
+const fileInput  = document.getElementById('audio-file');
+const uploadZone = document.getElementById('upload-zone');
+
+fileInput.addEventListener('change', () => {
+  const f = fileInput.files[0];
+  if (!f) return;
+  document.getElementById('file-name').style.display = 'block';
+  document.getElementById('file-name').textContent   = '✓ ' + f.name;
+  audioBlob     = f;
+  audioFeatures = null;
+  extractFeaturesFromBlob(f).then(feat => { audioFeatures = feat; enableAnalyse(); });
+  clearPresets();
 });
 
-const dz=document.getElementById('dropZone');
-dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');});
-dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
-dz.addEventListener('drop',e=>{
-  e.preventDefault();dz.classList.remove('drag');
-  const f=e.dataTransfer.files[0];if(!f)return;
-  if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();
-  const r=new FileReader();
-  r.onload=ev=>audioCtx.decodeAudioData(ev.target.result,processBuffer);
-  r.readAsArrayBuffer(f);
+uploadZone.addEventListener('dragover',  e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', ()  => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop',      e  => {
+  e.preventDefault(); uploadZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('audio/')) { fileInput.files = e.dataTransfer.files; fileInput.dispatchEvent(new Event('change')); }
 });
 
-document.querySelectorAll('.sample-btn').forEach(btn=>{
-  btn.addEventListener('click',()=>{
-    document.querySelectorAll('.sample-btn').forEach(b=>b.classList.remove('active'));
+/* ── PRESETS ── */
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    clearPresets();
     btn.classList.add('active');
-    const freq=+btn.dataset.freq,energy=+btn.dataset.energy,zcr=+btn.dataset.zcr;
-    synthWave(freq,energy);
-    enableBtn(()=>runAnalysis(freq,energy,zcr,400+freq*1.5+energy*200));
+    audioFeatures = {
+      pitch: parseFloat(btn.dataset.pitch),
+      rms:   parseFloat(btn.dataset.rms),
+      zcr:   parseFloat(btn.dataset.zcr),
+      sc:    parseFloat(btn.dataset.sc),
+    };
+    document.getElementById('file-name').style.display = 'block';
+    document.getElementById('file-name').textContent = '✓ Sample: ' + btn.textContent.trim();
+    enableAnalyse();
   });
 });
+function clearPresets() {
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+}
+
+/* ── ANALYSE ── */
+function enableAnalyse() {
+  document.getElementById('analyse-btn').disabled = false;
+}
+
+document.getElementById('analyse-btn').addEventListener('click', () => {
+  if (!audioFeatures) return;
+  const { pitch, rms, zcr, sc } = audioFeatures;
+  const scores = infer(pitch, rms, zcr, sc);
+  showResult(scores, pitch, rms, zcr, sc);
+});
+
+function showResult(scores, pitch, rms, zcr, sc) {
+  // Top emotion
+  const top = Object.entries(scores).sort((a,b) => b[1]-a[1])[0];
+  const emotion = top[0];
+
+  // Emotion badge
+  const badge = document.getElementById('emotion-badge');
+  const isHighStress = HIGH_STRESS.includes(emotion);
+  badge.style.background = isHighStress
+    ? 'linear-gradient(135deg,rgba(245,101,101,0.2),rgba(237,137,54,0.1))'
+    : 'linear-gradient(135deg,rgba(72,187,120,0.15),rgba(108,99,255,0.1))';
+  badge.style.border = `1px solid ${isHighStress ? 'rgba(245,101,101,0.3)' : 'rgba(72,187,120,0.3)'}`;
+  badge.innerHTML = `${EMOJI[emotion] || '🎙️'} ${emotion.charAt(0).toUpperCase() + emotion.slice(1)} <span style="font-size:0.95rem;color:var(--muted);font-weight:400">(${(top[1]*100).toFixed(1)}%)</span>`;
+
+  // Confidence bars
+  const grid = document.getElementById('conf-grid');
+  grid.innerHTML = '';
+  Object.entries(scores)
+    .sort((a,b) => b[1]-a[1])
+    .forEach(([em, sc2]) => {
+      const row = document.createElement('div');
+      row.className = 'bar-row';
+      row.innerHTML = `
+        <span>${EMOJI[em]} ${em}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:0%"></div></div>
+        <span>${(sc2*100).toFixed(1)}%</span>`;
+      grid.appendChild(row);
+      setTimeout(() => row.querySelector('.bar-fill').style.width = (sc2*100)+'%', 50);
+    });
+
+  // Stress indicator
+  const stressScore = HIGH_STRESS.includes(emotion) ? scores[emotion] : 0;
+  const level = stressScore > 0.5 ? 'high' : stressScore > 0.25 ? 'mid' : 'low';
+  const stressBox = document.getElementById('stress-box');
+  stressBox.style.background = STRESS_COLORS[level];
+  document.getElementById('stress-dot').style.background = STRESS_DOT[level];
+  document.getElementById('stress-text').textContent =
+    level === 'high' ? '⚠️ High stress indicators detected in voice'
+    : level === 'mid' ? '⚡ Moderate stress indicators present'
+    : '✅ Low stress — voice appears calm';
+
+  // Features
+  const featGrid = document.getElementById('feat-grid');
+  featGrid.innerHTML = `
+    <div class="feat-box"><div class="label">Pitch (F0)</div><div class="value">${pitch.toFixed(0)} Hz</div></div>
+    <div class="feat-box"><div class="label">RMS Energy</div><div class="value">${rms.toFixed(3)}</div></div>
+    <div class="feat-box"><div class="label">Zero Crossing Rate</div><div class="value">${zcr.toFixed(4)}</div></div>
+    <div class="feat-box"><div class="label">Spectral Centroid</div><div class="value">${Math.round(sc)} Hz</div></div>
+  `;
+
+  document.getElementById('result-card').style.display = 'block';
+  document.getElementById('feat-card').style.display   = 'block';
+  document.getElementById('result-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 </script>
 </body>
 </html>

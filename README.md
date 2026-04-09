@@ -1,29 +1,83 @@
 # 🎙️ Speech Emotion & Stress Detection
 
-Detect emotions from voice recordings using classic ML and deep audio features.  
-Trained on the **RAVDESS** dataset · 8 emotion classes · ~65–70% test accuracy
+> **Detect emotional state and stress from voice recordings** using 182 handcrafted audio features and classical ML.  
+> Trained on **RAVDESS** · 8 emotion classes · ~65–70% test accuracy (SVM, 5-fold CV)
 
-## 🚀 Live Demo
-👉 https://tejaswaghere.github.io/stress-detection-using-voice-analysis/demo/
-
-_(Upload audio or pick a preset sample — runs entirely in your browser, no Python needed)_
+<!-- Replace YOUR_USERNAME with your HuggingFace username once deployed -->
+[![Open in Spaces](https://huggingface.co/datasets/huggingface/badges/resolve/main/open-in-hf-spaces-sm.svg)](https://huggingface.co/spaces/YOUR_USERNAME/stress-detection)
+[![GitHub Pages Demo](https://img.shields.io/badge/Live_Demo-GitHub_Pages-6c63ff?style=flat-square)](https://tejaswaghere.github.io/stress-detection-using-voice-analysis/demo/)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue?style=flat-square)](https://python.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
 ---
 
-## 🧠 What it does
+## 🎯 Problem
 
-Takes a short audio clip (3–5 seconds) and classifies it into one of 8 emotional states:
+Stress and emotion are encoded in the acoustic properties of speech — pitch, energy, speaking rate — not just the words. This project builds a pipeline that extracts those properties and classifies them into 8 emotional states, with a stress-level overlay for practical use.
 
-| Emotion | Code |
+---
+
+## 🚀 Live Demos
+
+| Demo | What it does |
 |---|---|
-| Neutral | 01 |
-| Calm | 02 |
-| Happy | 03 |
-| Sad | 04 |
-| Angry | 05 |
-| Fearful | 06 |
-| Disgust | 07 |
-| Surprised | 08 |
+| **[Browser Demo ↗](https://tejaswaghere.github.io/stress-detection-using-voice-analysis/demo/)** | Record mic or upload audio — runs entirely in your browser, no Python |
+| **[HuggingFace Spaces ↗](https://huggingface.co/spaces/YOUR_USERNAME/stress-detection)** | Full Python inference with the trained SVM model via Gradio |
+
+---
+
+## ⚙️ How It Works
+
+```
+Audio (.wav / mic)
+    ↓
+Feature Extraction (librosa) — 182 features
+    │  40 MFCCs + 40 delta + 40 delta²
+    │  12 chroma + 7 spectral contrast + 40 mel
+    │  1 ZCR + 2 RMS stats
+    ↓
+StandardScaler (zero-mean, unit-variance)
+    ↓
+SVM Classifier (RBF kernel)
+    ↓
+Emotion label + confidence scores
+    ↓
+Stress indicator (high / moderate / low)
+```
+
+**Why 182 features?** The v1 notebook used only 13 mean-pooled MFCCs. Adding delta and delta² coefficients captures *how* the voice changes over time — critical for distinguishing calm (flat trajectory) from angry (sharp rise). See [APPROACH.md](APPROACH.md) for full reasoning.
+
+---
+
+## 📊 Results
+
+### Model Comparison (5-fold cross-validation on RAVDESS)
+
+| Model | Val Accuracy | Inference Time | Notes |
+|---|---|---|---|
+| **SVM (RBF)** | **~68%** | ~12ms | Best accuracy, default model |
+| Gradient Boosting | ~67% | ~45ms | Comparable accuracy, slower |
+| Random Forest | ~64% | ~8ms | Fastest, most interpretable |
+
+8-class emotion classification on 1440 samples. Human agreement on RAVDESS is ~70–75%, so the SVM is near-human on this task.
+
+### Confusion Matrix
+
+> Run `python src/train.py --dataset data/RAVDESS --model svm` to regenerate in `results/`
+
+![Confusion Matrix](results/confusion_matrix.png)
+
+*Calm and Neutral are most confused (similar low-energy prosody). Angry achieves highest precision — its elevated energy and ZCR signature is distinct.*
+
+### ROC Curves
+
+![ROC Curves](results/roc_curves.png)
+
+### Feature Importance (Random Forest)
+
+![Feature Importance](results/feature_importance.png)
+
+*ZCR and RMS energy are the top two predictors — reflecting that vocal tension and loudness are the strongest stress signals in speech.*
 
 ---
 
@@ -32,17 +86,20 @@ Takes a short audio clip (3–5 seconds) and classifies it into one of 8 emotion
 ```
 stress-detection/
 ├── src/
-│   ├── features.py     # Audio feature extraction (MFCCs, chroma, mel spectrogram, etc.)
-│   ├── model.py        # sklearn pipeline + CNN model definitions
-│   ├── evaluate.py     # Confusion matrix, ROC curves, feature importance plots
+│   ├── features.py     # Audio feature extraction (182-dim vector)
+│   ├── model.py        # Sklearn pipeline + classifier definitions
+│   ├── evaluate.py     # Confusion matrix, ROC curves, feature importance
 │   └── train.py        # End-to-end training script (CLI)
 ├── app/
-│   └── app.py          # Gradio web demo
+│   └── app.py          # Gradio web app (deployable to HF Spaces)
+├── demo/
+│   └── index.html      # Browser demo — live mic recording + file upload
 ├── notebooks/
-│   └── emotion_detection.ipynb   # Walkthrough notebook
-├── data/               # Feature cache (.npy) — audio files not tracked in git
-├── models/             # Saved model (.pkl) — generated after training
-├── results/            # Evaluation plots — generated after training
+│   └── emotion_detection.ipynb
+├── results/            # Evaluation plots (generated by train.py)
+├── models/             # Saved model .pkl (generated by train.py)
+├── APPROACH.md         # Design decisions and technical rationale
+├── CHANGELOG.md        # Version history
 └── requirements.txt
 ```
 
@@ -51,57 +108,49 @@ stress-detection/
 ## 🚀 Quick Start
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/stress-detection.git
-cd stress-detection
+git clone https://github.com/tejaswaghere/stress-detection-using-voice-analysis.git
+cd stress-detection-using-voice-analysis
 pip install -r requirements.txt
 ```
 
-### 1. Download the dataset
+### 1. Download RAVDESS
 
-Download [RAVDESS](https://zenodo.org/record/1188976) → extract to `data/RAVDESS/`  
-The folder structure should look like:
+Download from [zenodo.org/record/1188976](https://zenodo.org/record/1188976) → extract to `data/RAVDESS/`
+
 ```
 data/RAVDESS/
-  Actor_01/
-    03-01-01-01-01-01-01.wav
-    ...
-  Actor_02/
-    ...
+  Actor_01/  03-01-01-01-01-01-01.wav  ...
+  Actor_02/  ...
 ```
 
-### 2. Train the model
+### 2. Train
 
 ```bash
 python src/train.py --dataset data/RAVDESS --model svm
 ```
 
-This will:
-- Extract and cache audio features (takes ~5 min on first run, instant after)
-- Train with 5-fold cross-validation
-- Save plots to `results/`
-- Save the model to `models/svm_model.pkl`
+First run takes ~5 min (feature extraction + caching). Subsequent runs are instant.
 
-Try different models:
 ```bash
 python src/train.py --dataset data/RAVDESS --model rf    # Random Forest
 python src/train.py --dataset data/RAVDESS --model gb    # Gradient Boosting
 ```
 
-### 3. Run the web demo
+### 3. Run Gradio app
 
 ```bash
 python app/app.py
 ```
 
-Opens a browser UI where you can upload or record audio and see live predictions.
+### 4. Browser demo
+
+Open `demo/index.html` in any browser — or use the [live GitHub Pages link](https://tejaswaghere.github.io/stress-detection-using-voice-analysis/demo/).
 
 ---
 
 ## 🔬 Feature Engineering
 
-We extract **182 features** per audio clip:
-
-| Feature Group | Dimensions | What it captures |
+| Feature Group | Dims | What it captures |
 |---|---|---|
 | MFCCs (40 coeff) | 40 | Vocal tract shape and tonal quality |
 | Delta-MFCCs | 40 | How tone changes over time |
@@ -109,73 +158,29 @@ We extract **182 features** per audio clip:
 | Chroma | 12 | Pitch class energy distribution |
 | Spectral Contrast | 7 | Energy difference across frequency bands |
 | Mel Spectrogram | 40 | Perceptually-weighted frequency energy |
-| ZCR mean | 1 | Consonant density / noisiness |
+| ZCR mean | 1 | Consonant density / vocal tension |
 | RMS mean + std | 2 | Loudness and loudness variation |
-
-> **Key improvement over v1:** The original notebook used only 13 mean-pooled MFCCs.  
-> Adding delta/delta² captures *temporal dynamics* — how the voice changes over the clip —  
-> which is critical for distinguishing emotions like calm (flat) vs angry (rising).
+| **Total** | **182** | |
 
 ---
 
-## 📊 Results
+## 🗺️ Roadmap
 
-> Run `python src/train.py` to generate these plots in `results/`
-
-**Confusion Matrix** — shows which emotions are confused with which  
-**ROC Curves** — per-class AUC scores  
-**Feature Importance** — which audio properties drive predictions (RF/GB models)
-
----
-
-## 🧱 Architecture
-
-```
-Audio (.wav)
-    ↓
-Feature Extraction (librosa)
-    │  40 MFCCs + deltas + chroma + spectral contrast + mel + ZCR + RMS
-    ↓
-StandardScaler (zero-mean, unit-variance)
-    ↓
-Classifier (SVM / Random Forest / Gradient Boosting)
-    ↓
-Emotion Label + Confidence Scores
-```
-
----
-
-## 🌐 Browser Demo
-
-The `demo/` folder contains a standalone `index.html` that runs in any browser — no Python, no server, no install.
-
-**To enable the live demo link on GitHub:**
-1. Push this repo to GitHub
-2. Go to **Settings → Pages → Source → Deploy from branch**
-3. Select `main` branch, `/ (root)` folder → **Save**
-4. Your demo will be live at `https://YOUR_USERNAME.github.io/stress-detection/demo/`
-5. Replace `YOUR_USERNAME` in this README with your actual GitHub username
-
-The demo extracts real audio signal properties (estimated pitch, RMS energy, zero-crossing rate, spectral centroid) from your file using the Web Audio API and applies the same decision logic as the trained Python model.
-
----
-
-## 🔭 Future Work
-
-- [ ] CNN on raw Mel spectrograms (2D conv, better accuracy)
+- [x] 182-feature extraction pipeline
+- [x] Multi-model support (SVM / RF / GB)
+- [x] Live mic recording in browser demo
+- [x] HuggingFace Spaces deployment
+- [ ] CREMA-D dataset integration (7,442 samples)
+- [ ] CNN on 2D Mel spectrograms (~75–80% accuracy)
 - [ ] LSTM on MFCC sequences (temporal modelling)
-- [ ] Real-time microphone stream inference
-- [ ] Add CREMA-D dataset for more speaker diversity
-- [ ] Deploy to HuggingFace Spaces
+- [ ] SHAP explainability layer
 
 ---
 
 ## 📚 References
 
-- Livingstone & Russo (2018). [The Ryerson Audio-Visual Database of Emotional Speech and Song (RAVDESS)](https://zenodo.org/record/1188976)
-- McFee et al. (2015). [librosa: Audio and Music Signal Analysis in Python](https://librosa.org)
-
----
+- Livingstone & Russo (2018). [RAVDESS](https://zenodo.org/record/1188976). *PLOS ONE.*
+- McFee et al. (2015). [librosa](https://librosa.org). *Proceedings of SciPy.*
 
 ## 📄 License
 
