@@ -6,107 +6,77 @@
   <title>Speech Emotion & Stress Detector</title>
   <style>
     :root {
-      --bg: #0f1117; --card: #1a1d27; --border: #2a2d3a;
-      --accent: #6c63ff; --accent2: #ff6584; --text: #e2e8f0;
-      --muted: #8892a4; --success: #48bb78; --warn: #ed8936;
+      --bg:#0f1117;--card:#1a1d27;--border:#2a2d3a;
+      --accent:#6c63ff;--accent2:#ff6584;--text:#e2e8f0;
+      --muted:#8892a4;--success:#48bb78;--warn:#ed8936;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Inter', system-ui, sans-serif; background: var(--bg);
-      color: var(--text); min-height: 100vh;
-      display: flex; flex-direction: column; align-items: center; padding: 2rem 1rem;
-    }
-    header { text-align: center; margin-bottom: 2.5rem; }
-    header h1 {
-      font-size: 2rem; font-weight: 700;
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-    }
-    header p { color: var(--muted); margin-top: 0.5rem; font-size: 0.95rem; }
-    .badge {
-      display: inline-flex; align-items: center; gap: 0.4rem;
-      background: rgba(108,99,255,0.15); border: 1px solid rgba(108,99,255,0.3);
-      border-radius: 999px; padding: 0.25rem 0.75rem; font-size: 0.78rem; color: #a78bfa; margin-top: 0.75rem;
-    }
-    .card {
-      background: var(--card); border: 1px solid var(--border); border-radius: 16px;
-      padding: 1.75rem; width: 100%; max-width: 580px; margin-bottom: 1.25rem;
-    }
-    .card h2 {
-      font-size: 0.85rem; font-weight: 600; letter-spacing: 0.08em;
-      text-transform: uppercase; color: var(--muted); margin-bottom: 1.25rem;
-    }
-    .mic-area { display: flex; flex-direction: column; align-items: center; gap: 1.25rem; }
-    .mic-btn {
-      width: 80px; height: 80px; border-radius: 50%; border: none; cursor: pointer;
-      display: flex; align-items: center; justify-content: center; font-size: 2rem;
-      transition: transform 0.15s; background: linear-gradient(135deg, var(--accent), #9f7aea);
-    }
-    .mic-btn:hover { transform: scale(1.07); }
-    .mic-btn.recording { background: linear-gradient(135deg,#e53e3e,var(--accent2)); animation: pulse 1.2s infinite; }
-    @keyframes pulse {
-      0%   { box-shadow: 0 0 0 0 rgba(229,62,62,0.5); }
-      70%  { box-shadow: 0 0 0 18px rgba(229,62,62,0); }
-      100% { box-shadow: 0 0 0 0 rgba(229,62,62,0); }
-    }
-    .mic-status { font-size: 0.9rem; color: var(--muted); text-align: center; min-height: 1.2em; }
-    .mic-status.active { color: #fc8181; } .mic-status.done { color: var(--success); }
-    #waveform { width: 100%; height: 52px; border-radius: 8px; background: rgba(108,99,255,0.06); display: block; }
-    .upload-zone {
-      border: 2px dashed var(--border); border-radius: 10px; padding: 1.5rem;
-      text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s;
-    }
-    .upload-zone:hover, .upload-zone.drag-over { border-color: var(--accent); background: rgba(108,99,255,0.05); }
-    .upload-zone input { display: none; }
-    .upload-zone p { color: var(--muted); font-size: 0.88rem; }
-    .upload-zone p strong { color: var(--text); }
-    #file-name { margin-top: 0.6rem; font-size: 0.82rem; color: var(--accent); display: none; }
-    .presets { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
-    .preset-btn {
-      background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 8px;
-      padding: 0.4rem 0.85rem; font-size: 0.82rem; color: var(--muted); cursor: pointer; transition: all 0.15s;
-    }
-    .preset-btn:hover { background: rgba(108,99,255,0.1); border-color: var(--accent); color: var(--text); }
-    .preset-btn.active { background: rgba(108,99,255,0.2); border-color: var(--accent); color: #c4b5fd; }
-    #analyse-btn {
-      width: 100%; padding: 0.85rem; background: linear-gradient(135deg, var(--accent), #9f7aea);
-      border: none; border-radius: 10px; color: #fff; font-size: 1rem; font-weight: 600;
-      cursor: pointer; transition: opacity 0.2s, transform 0.15s; margin-top: 0.5rem;
-    }
-    #analyse-btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
-    #analyse-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-    #result-card { display: none; }
-    .emotion-badge {
-      display: flex; align-items: center; justify-content: center; gap: 0.6rem;
-      padding: 1rem 1.5rem; border-radius: 12px; font-size: 1.5rem; font-weight: 700;
-      margin-bottom: 1.25rem; text-align: center;
-    }
-    .confidence-grid { display: flex; flex-direction: column; gap: 0.55rem; }
-    .bar-row { display: grid; grid-template-columns: 90px 1fr 48px; align-items: center; gap: 0.5rem; font-size: 0.82rem; }
-    .bar-row span:first-child { color: var(--muted); text-align: right; }
-    .bar-track { height: 7px; background: rgba(255,255,255,0.07); border-radius: 99px; overflow: hidden; }
-    .bar-fill { height: 100%; border-radius: 99px; transition: width 0.6s cubic-bezier(.4,0,.2,1); background: linear-gradient(90deg, var(--accent), var(--accent2)); }
-    .bar-row span:last-child { color: var(--muted); font-size: 0.78rem; }
-    .stress-indicator {
-      margin-top: 1.25rem; padding: 0.9rem 1rem; border-radius: 10px;
-      display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem;
-    }
-    .stress-indicator .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-    .features-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 0.75rem; }
-    .feat-box { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem; }
-    .feat-box .label { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.25rem; }
-    .feat-box .value { font-size: 1.05rem; font-weight: 600; }
-    .warn-banner {
-      background: rgba(237,137,54,0.12); border: 1px solid rgba(237,137,54,0.3);
-      border-radius: 8px; padding: 0.6rem 0.9rem; font-size: 0.82rem;
-      color: var(--warn); margin-bottom: 1rem; display: none;
-    }
-    footer { margin-top: 1rem; color: var(--muted); font-size: 0.78rem; text-align: center; }
-    footer a { color: var(--accent); text-decoration: none; }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);
+      min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:2rem 1rem;}
+    header{text-align:center;margin-bottom:2.5rem;}
+    header h1{font-size:2rem;font-weight:700;
+      background:linear-gradient(135deg,var(--accent),var(--accent2));
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+    header p{color:var(--muted);margin-top:.5rem;font-size:.95rem;}
+    .badge{display:inline-flex;align-items:center;gap:.4rem;
+      background:rgba(108,99,255,.15);border:1px solid rgba(108,99,255,.3);
+      border-radius:999px;padding:.25rem .75rem;font-size:.78rem;color:#a78bfa;margin-top:.75rem;}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;
+      padding:1.75rem;width:100%;max-width:580px;margin-bottom:1.25rem;}
+    .card h2{font-size:.85rem;font-weight:600;letter-spacing:.08em;
+      text-transform:uppercase;color:var(--muted);margin-bottom:1.25rem;}
+    .mic-area{display:flex;flex-direction:column;align-items:center;gap:1.25rem;}
+    .mic-btn{width:80px;height:80px;border-radius:50%;border:none;cursor:pointer;
+      display:flex;align-items:center;justify-content:center;font-size:2rem;
+      transition:transform .15s;background:linear-gradient(135deg,var(--accent),#9f7aea);}
+    .mic-btn:hover{transform:scale(1.07);}
+    .mic-btn.recording{background:linear-gradient(135deg,#e53e3e,var(--accent2));animation:pulse 1.2s infinite;}
+    @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(229,62,62,.5);}70%{box-shadow:0 0 0 18px rgba(229,62,62,0);}100%{box-shadow:0 0 0 0 rgba(229,62,62,0);}}
+    .mic-status{font-size:.9rem;color:var(--muted);text-align:center;min-height:1.2em;}
+    .mic-status.active{color:#fc8181;}.mic-status.done{color:var(--success);}
+    #waveform{width:100%;height:52px;border-radius:8px;background:rgba(108,99,255,.06);display:block;}
+    .upload-zone{border:2px dashed var(--border);border-radius:10px;padding:1.5rem;
+      text-align:center;cursor:pointer;transition:border-color .2s,background .2s;}
+    .upload-zone:hover,.upload-zone.drag-over{border-color:var(--accent);background:rgba(108,99,255,.05);}
+    .upload-zone input{display:none;}
+    .upload-zone p{color:var(--muted);font-size:.88rem;}
+    .upload-zone p strong{color:var(--text);}
+    #file-name{margin-top:.6rem;font-size:.82rem;color:var(--accent);display:none;}
+    .presets{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1rem;}
+    .preset-btn{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;
+      padding:.4rem .85rem;font-size:.82rem;color:var(--muted);cursor:pointer;transition:all .15s;}
+    .preset-btn:hover{background:rgba(108,99,255,.1);border-color:var(--accent);color:var(--text);}
+    .preset-btn.active{background:rgba(108,99,255,.2);border-color:var(--accent);color:#c4b5fd;}
+    #analyse-btn{width:100%;padding:.85rem;background:linear-gradient(135deg,var(--accent),#9f7aea);
+      border:none;border-radius:10px;color:#fff;font-size:1rem;font-weight:600;
+      cursor:pointer;transition:opacity .2s,transform .15s;margin-top:.5rem;}
+    #analyse-btn:hover:not(:disabled){opacity:.88;transform:translateY(-1px);}
+    #analyse-btn:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+    #result-card{display:none;}
+    .emotion-badge{display:flex;align-items:center;justify-content:center;gap:.6rem;
+      padding:1rem 1.5rem;border-radius:12px;font-size:1.5rem;font-weight:700;
+      margin-bottom:1.25rem;text-align:center;}
+    .confidence-grid{display:flex;flex-direction:column;gap:.55rem;}
+    .bar-row{display:grid;grid-template-columns:90px 1fr 48px;align-items:center;gap:.5rem;font-size:.82rem;}
+    .bar-row span:first-child{color:var(--muted);text-align:right;}
+    .bar-track{height:7px;background:rgba(255,255,255,.07);border-radius:99px;overflow:hidden;}
+    .bar-fill{height:100%;border-radius:99px;transition:width .6s cubic-bezier(.4,0,.2,1);
+      background:linear-gradient(90deg,var(--accent),var(--accent2));}
+    .bar-row span:last-child{color:var(--muted);font-size:.78rem;}
+    .stress-indicator{margin-top:1.25rem;padding:.9rem 1rem;border-radius:10px;
+      display:flex;align-items:center;gap:.75rem;font-size:.9rem;}
+    .stress-indicator .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+    .features-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:.75rem;}
+    .feat-box{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:.75rem 1rem;}
+    .feat-box .label{font-size:.75rem;color:var(--muted);margin-bottom:.25rem;}
+    .feat-box .value{font-size:1.05rem;font-weight:600;}
+    .warn-banner{background:rgba(237,137,54,.12);border:1px solid rgba(237,137,54,.3);
+      border-radius:8px;padding:.6rem .9rem;font-size:.82rem;color:var(--warn);margin-bottom:1rem;display:none;}
+    footer{margin-top:1rem;color:var(--muted);font-size:.78rem;text-align:center;}
+    footer a{color:var(--accent);text-decoration:none;}
   </style>
 </head>
 <body>
-
 <header>
   <h1>🎙️ Stress & Emotion Detector</h1>
   <p>Detect emotional state from your voice — runs entirely in your browser</p>
@@ -125,12 +95,12 @@
 <div class="card">
   <h2>📁 Upload Audio</h2>
   <label class="upload-zone" id="upload-zone">
-    <input type="file" id="audio-file" accept="audio/*" />
+    <input type="file" id="audio-file" accept="audio/*"/>
     <p><strong>Drop a .wav / .mp3 file here</strong><br/>or click to browse</p>
     <p id="file-name"></p>
   </label>
   <div class="presets">
-    <span style="font-size:0.8rem;color:var(--muted);align-self:center">Try a sample:</span>
+    <span style="font-size:.8rem;color:var(--muted);align-self:center">Try a sample:</span>
     <button class="preset-btn" data-pitch="200" data-rms="0.82" data-zcr="0.28" data-sc="3900">😠 Angry</button>
     <button class="preset-btn" data-pitch="112" data-rms="0.28" data-zcr="0.06" data-sc="1750">😌 Calm</button>
     <button class="preset-btn" data-pitch="178" data-rms="0.58" data-zcr="0.14" data-sc="3100">😊 Happy</button>
@@ -167,325 +137,263 @@
 </footer>
 
 <script>
-/* ─────────────────────────────────────────────────────────────────────────────
-   WHY THE PREVIOUS VERSION SHOWED 12.5% FOR ALL EMOTIONS:
-   
-   The OfflineAudioContext.startRendering() call was completing AFTER the
-   analyser snapshot was taken — so getFloatFrequencyData() returned all -Infinity
-   (no signal analysed yet). This made the spectral centroid calculation produce
-   mSum=0 → sc fallback = 2050 Hz.
-   
-   Combined with the pitch autocorrelation often hitting a tie or its own fallback,
-   the feature vector [122, 0.36, 0.09, 2050] was being passed to infer() —
-   which is EXACTLY the neutral centroid. The Gaussian similarity from every
-   emotion to that specific point happened to be equal (each centroid is equally
-   far in normalised feature space when you land on the exact neutral point).
-   Softmax of equal values = uniform distribution = 12.5% each.
-   
-   FIX: Compute spectral centroid using a manual FFT on raw PCM (no async render
-   race), and add a proper silence guard so bad audio shows a warning instead of
-   garbage predictions.
-   ───────────────────────────────────────────────────────────────────────────── */
+// ─── Constants ───────────────────────────────────────────────────────────────
+const EMOJI={neutral:'😐',calm:'😌',happy:'😊',sad:'😢',angry:'😠',fearful:'😨',disgust:'🤢',surprised:'😲'};
+const HIGH_STRESS=new Set(['angry','fearful','disgust','surprised']);
+const STRESS_COLORS={low:'rgba(72,187,120,.15)',mid:'rgba(237,137,54,.15)',high:'rgba(245,101,101,.15)'};
+const STRESS_DOT={low:'#48bb78',mid:'#ed8936',high:'#f56565'};
 
-const EMOJI       = {neutral:'😐',calm:'😌',happy:'😊',sad:'😢',angry:'😠',fearful:'😨',disgust:'🤢',surprised:'😲'};
-const HIGH_STRESS = new Set(['angry','fearful','disgust','surprised']);
-const STRESS_COLORS = {low:'rgba(72,187,120,0.15)',mid:'rgba(237,137,54,0.15)',high:'rgba(245,101,101,0.15)'};
-const STRESS_DOT    = {low:'#48bb78',mid:'#ed8936',high:'#f56565'};
-
-/*
-  CENTROIDS: each emotion's typical acoustic profile in RAVDESS.
-    c = [pitch_hz, rms_norm, zcr_norm, sc_hz]
-    s = per-dimension sigma (tolerance / spread)
-  
-  WEIGHTS: how much each feature dimension contributes to classification.
-  RMS and SC are most reliable from browser audio.
-  Pitch autocorrelation is noisier, so it's weighted lower.
-*/
-const CENTROIDS = {
-  neutral:  { c:[122, 0.36, 0.090, 2050], s:[30, 0.13, 0.045, 550] },
-  calm:     { c:[112, 0.27, 0.060, 1750], s:[25, 0.11, 0.035, 480] },
-  happy:    { c:[178, 0.60, 0.140, 3100], s:[35, 0.16, 0.050, 650] },
-  sad:      { c:[ 92, 0.22, 0.040, 1350], s:[20, 0.09, 0.030, 420] },
-  angry:    { c:[200, 0.82, 0.280, 3900], s:[40, 0.14, 0.065, 680] },
-  fearful:  { c:[215, 0.50, 0.220, 4200], s:[40, 0.17, 0.065, 720] },
-  disgust:  { c:[160, 0.55, 0.180, 3200], s:[35, 0.17, 0.065, 620] },
-  surprised:{ c:[185, 0.65, 0.170, 3500], s:[40, 0.17, 0.060, 680] },
+// ─── Emotion centroids in [pitch_hz, rms_norm, zcr_norm, sc_hz] space ───────
+// Derived from published RAVDESS acoustic analysis.
+// rms_norm  = raw_rms * 8  (typical speech 0.03–0.10 maps to 0.24–0.80)
+// zcr_norm  = raw_zcr * 30 (typical speech 0.002–0.009 maps to 0.06–0.27)
+const C = {
+  neutral:  {c:[122,0.36,0.090,2050], s:[30,0.13,0.045,550]},
+  calm:     {c:[112,0.27,0.060,1750], s:[25,0.11,0.035,480]},
+  happy:    {c:[178,0.60,0.140,3100], s:[35,0.16,0.050,650]},
+  sad:      {c:[ 92,0.22,0.040,1350], s:[20,0.09,0.030,420]},
+  angry:    {c:[200,0.82,0.280,3900], s:[40,0.14,0.065,680]},
+  fearful:  {c:[215,0.50,0.220,4200], s:[40,0.17,0.065,720]},
+  disgust:  {c:[160,0.55,0.180,3200], s:[35,0.17,0.065,620]},
+  surprised:{c:[185,0.65,0.170,3500], s:[40,0.17,0.060,680]},
 };
-const W = [0.55, 1.5, 1.2, 1.4]; // weights: [pitch, rms, zcr, sc]
+const W=[0.55,1.5,1.2,1.4]; // [pitch, rms, zcr, sc] — rms+sc weighted highest
 
-function gaussSim(v, c, s) {
-  const z = (v - c) / s;
-  return Math.exp(-0.5 * z * z);
-}
-
-function infer(pitch, rms, zcr, sc) {
-  const inp = [pitch, rms, zcr, sc];
-  const raw = {};
-  for (const [em, {c, s}] of Object.entries(CENTROIDS)) {
-    let score = 1.0;
-    for (let i = 0; i < 4; i++) score *= Math.pow(gaussSim(inp[i], c[i], s[i]), W[i]);
-    raw[em] = score;
+function infer(pitch,rms,zcr,sc){
+  const inp=[pitch,rms,zcr,sc];
+  // Compute weighted Gaussian similarity to each centroid
+  const raw={};
+  for(const[em,{c,s}]of Object.entries(C)){
+    let score=1;
+    for(let i=0;i<4;i++){const z=(inp[i]-c[i])/s[i];score*=Math.pow(Math.exp(-.5*z*z),W[i]);}
+    raw[em]=score;
   }
-  // Softmax with temperature T=0.3 → sharpens the winner clearly above others
-  const T = 0.3;
-  const logits = Object.fromEntries(Object.entries(raw).map(([k,v]) => [k, Math.log(v + 1e-12) / T]));
-  const maxL = Math.max(...Object.values(logits));
-  const exps  = Object.fromEntries(Object.entries(logits).map(([k,v]) => [k, Math.exp(v - maxL)]));
-  const sum   = Object.values(exps).reduce((a,b) => a+b, 0);
-  return Object.fromEntries(Object.entries(exps).map(([k,v]) => [k, v/sum]));
+  // Softmax with temperature T=0.3 to sharpen the winner
+  const T=0.3;
+  const logits=Object.fromEntries(Object.entries(raw).map(([k,v])=>[k,Math.log(v+1e-12)/T]));
+  const maxL=Math.max(...Object.values(logits));
+  const exps=Object.fromEntries(Object.entries(logits).map(([k,v])=>[k,Math.exp(v-maxL)]));
+  const sum=Object.values(exps).reduce((a,b)=>a+b,0);
+  return Object.fromEntries(Object.entries(exps).map(([k,v])=>[k,v/sum]));
 }
 
-/* ─── Waveform ─── */
-const canvas = document.getElementById('waveform');
-const cx = canvas.getContext('2d');
-let animFrame = null;
+// ─── Feature extraction — 100% synchronous, no OfflineAudioContext ───────────
+// Previous versions used OfflineAudioContext.startRendering() which caused a
+// race condition: getFloatFrequencyData() ran before rendering completed,
+// returning -Infinity for all bins → sc fallback = 2050 → same as neutral
+// centroid → all Gaussians equal → softmax = 12.5% each.
+// 
+// This version does everything on the raw Float32Array synchronously.
+async function extractFeatures(blob){
+  return new Promise(resolve=>{
+    const reader=new FileReader();
+    reader.onload=async e=>{
+      try{
+        const ac=new(window.AudioContext||window.webkitAudioContext)();
+        const ab=await ac.decodeAudioData(e.target.result);
+        const d=ab.getChannelData(0);
+        const sr=ab.sampleRate;
+        const N=d.length;
 
-function drawIdle() {
-  canvas.width = canvas.offsetWidth;
-  cx.clearRect(0,0,canvas.width,canvas.height);
-  cx.strokeStyle = 'rgba(108,99,255,0.25)'; cx.lineWidth = 1.5;
-  cx.setLineDash([4,6]);
-  cx.beginPath(); cx.moveTo(0, canvas.height/2); cx.lineTo(canvas.width, canvas.height/2); cx.stroke();
-  cx.setLineDash([]);
-}
-drawIdle();
-window.addEventListener('resize', drawIdle);
+        // 1. RMS — full clip
+        let sq=0; for(let i=0;i<N;i++) sq+=d[i]*d[i];
+        const rawRms=Math.sqrt(sq/N);
+        const rms=Math.min(1,rawRms*8);
 
-function drawLive(analyser) {
-  canvas.width = canvas.offsetWidth;
-  const buf = new Uint8Array(analyser.frequencyBinCount);
-  (function frame() {
-    animFrame = requestAnimationFrame(frame);
-    analyser.getByteTimeDomainData(buf);
-    cx.clearRect(0,0,canvas.width,canvas.height);
-    cx.strokeStyle = '#6c63ff'; cx.lineWidth = 2; cx.beginPath();
-    buf.forEach((v,i) => {
-      const y = (v/128)*(canvas.height/2);
-      i===0 ? cx.moveTo(0,y) : cx.lineTo(i*canvas.width/buf.length,y);
-    });
-    cx.stroke();
-  })();
-}
-
-/* ─── Microphone ─── */
-let mediaRecorder = null, isRecording = false;
-document.getElementById('mic-btn').addEventListener('click', async () => {
-  if (!isRecording) {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-      const analyserNode = audioCtx.createAnalyser(); analyserNode.fftSize = 256;
-      audioCtx.createMediaStreamSource(stream).connect(analyserNode);
-      const chunks = [];
-      mediaRecorder = new MediaRecorder(stream);
-      mediaRecorder.ondataavailable = e => chunks.push(e.data);
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunks, { type:'audio/webm' });
-        extractFeatures(blob).then(f => { audioFeatures = f; enableAnalyse(); });
-        stream.getTracks().forEach(t => t.stop());
-        cancelAnimationFrame(animFrame); drawIdle();
-      };
-      mediaRecorder.start(); isRecording = true;
-      drawLive(analyserNode);
-      document.getElementById('mic-btn').classList.add('recording');
-      document.getElementById('mic-btn').textContent = '⏹';
-      setStatus('Recording… click to stop', 'active');
-    } catch(e) {
-      setStatus('Microphone access denied — please allow access in browser settings', '');
-    }
-  } else {
-    mediaRecorder.stop(); isRecording = false;
-    document.getElementById('mic-btn').classList.remove('recording');
-    document.getElementById('mic-btn').textContent = '🎙️';
-    setStatus('Processing recording…', 'done');
-    setTimeout(() => setStatus('Recording ready — click Analyse!', 'done'), 1200);
-  }
-});
-function setStatus(msg, cls) {
-  const el = document.getElementById('mic-status'); el.textContent = msg; el.className = 'mic-status ' + cls;
-}
-
-/* ─── Feature extraction ─────────────────────────────────────────────────────
-   Extracts 4 acoustic features entirely from raw PCM samples.
-   NO OfflineAudioContext or async render — this was the race-condition bug
-   causing the uniform 12.5% distribution in the previous version.
-   
-   All DSP is done synchronously on the decoded Float32Array data.
-   ─────────────────────────────────────────────────────────────────────────── */
-async function extractFeatures(blob) {
-  return new Promise(resolve => {
-    const reader = new FileReader();
-    reader.onload = async e => {
-      try {
-        const ac = new (window.AudioContext||window.webkitAudioContext)();
-        const ab = await ac.decodeAudioData(e.target.result);
-        const data = ab.getChannelData(0);
-        const sr = ab.sampleRate;
-        const N = data.length;
-
-        /* 1 — RMS energy */
-        let sq = 0;
-        for (let i = 0; i < N; i++) sq += data[i]*data[i];
-        const rawRms = Math.sqrt(sq / N);
-        const rms = Math.min(1, rawRms * 8);
-        // rawRms < 0.005 = effectively silence (mic muted / no speech)
-        if (rawRms < 0.005) {
-          resolve({ pitch:122, rms:0.36, zcr:0.09, sc:2050, rawRms, rawZcr:0.003, isSilent:true });
+        // Silence guard
+        if(rawRms<0.005){
+          resolve({pitch:122,rms:0.36,zcr:0.09,sc:2050,rawRms,rawZcr:0,isSilent:true});
           return;
         }
 
-        /* 2 — Zero crossing rate */
-        let zc = 0;
-        for (let i = 1; i < N; i++) if ((data[i]>=0) !== (data[i-1]>=0)) zc++;
-        const rawZcr = zc / N;
-        const zcr = Math.min(1, rawZcr * 30);
+        // 2. ZCR — full clip
+        let zc=0; for(let i=1;i<N;i++) if((d[i]>=0)!==(d[i-1]>=0)) zc++;
+        const rawZcr=zc/N;
+        const zcr=Math.min(1,rawZcr*30);
 
-        /* 3 — Spectral centroid via synchronous DFT on 4096-sample window
-               Uses Hann window to reduce spectral leakage.
-               Runs on the middle of the clip to avoid leading/trailing silence. */
-        const FFT_N = 4096;
-        const fftStart = Math.max(0, Math.floor(N/2) - Math.floor(FFT_N/2));
-        const fftWin = data.slice(fftStart, fftStart + FFT_N);
-        const halfN = FFT_N / 2;
-        let wSum = 0, mSum = 0;
-        for (let k = 1; k < halfN; k++) {
-          let re = 0, im = 0;
-          // Full DFT is O(N²) — impractical. Use ~512 equally-spaced time
-          // samples as an approximation (same accuracy for smooth spectral shapes).
-          const step = Math.max(1, Math.floor(FFT_N / 512));
-          for (let n = 0; n < FFT_N; n += step) {
-            const hann = 0.5 - 0.5 * Math.cos(2 * Math.PI * n / (FFT_N - 1));
-            const angle = 2 * Math.PI * k * n / FFT_N;
-            const s = fftWin[n] * hann;
-            re += s * Math.cos(angle);
-            im -= s * Math.sin(angle);
+        // 3. Spectral centroid — synchronous DFT on 512-sample mid-clip window
+        // Small window = fast; enough for spectral centroid estimation.
+        // Hann window applied to reduce leakage.
+        const SC_N=512;
+        const scStart=Math.max(0,Math.floor(N/2)-Math.floor(SC_N/2));
+        const seg=d.slice(scStart,scStart+SC_N);
+        let wSum=0,mSum=0;
+        for(let k=1;k<SC_N/2;k++){
+          let re=0,im=0;
+          for(let n=0;n<SC_N;n++){
+            const hann=0.5-0.5*Math.cos(2*Math.PI*n/(SC_N-1));
+            const ang=2*Math.PI*k*n/SC_N;
+            re+=seg[n]*hann*Math.cos(ang);
+            im-=seg[n]*hann*Math.sin(ang);
           }
-          const mag = Math.sqrt(re*re + im*im);
-          const freq = k * sr / FFT_N;
-          wSum += freq * mag;
-          mSum += mag;
+          const mag=Math.sqrt(re*re+im*im);
+          const freq=k*sr/SC_N;
+          wSum+=freq*mag; mSum+=mag;
         }
-        const sc = mSum > 0 ? wSum / mSum : 2050;
+        const sc=mSum>1e-6?wSum/mSum:2050;
 
-        /* 4 — Pitch via autocorrelation on mid-clip window (80–300 Hz range) */
-        const WIN = 2048;
-        const midStart = Math.max(0, Math.floor(N/2) - WIN);
-        const win = data.slice(midStart, midStart + WIN);
-        const minLag = Math.floor(sr/300);
-        const maxLag = Math.min(Math.floor(sr/80), win.length - 1);
-        let bestLag = minLag, bestCorr = -Infinity;
-        for (let lag = minLag; lag <= maxLag; lag++) {
-          let corr = 0;
-          const lim = win.length - lag;
-          for (let i = 0; i < lim; i++) corr += win[i] * win[i+lag];
-          if (corr > bestCorr) { bestCorr = corr; bestLag = lag; }
+        // 4. Pitch — autocorrelation on 1024-sample mid-clip window
+        const P_N=1024;
+        const pStart=Math.max(0,Math.floor(N/2)-Math.floor(P_N/2));
+        const pw=d.slice(pStart,pStart+P_N);
+        const minLag=Math.floor(sr/300),maxLag=Math.min(Math.floor(sr/80),P_N-1);
+        let bestLag=minLag,bestCorr=-Infinity;
+        for(let lag=minLag;lag<=maxLag;lag++){
+          let corr=0;
+          for(let i=0;i<P_N-lag;i++) corr+=pw[i]*pw[i+lag];
+          if(corr>bestCorr){bestCorr=corr;bestLag=lag;}
         }
-        const pitch = sr / bestLag;
+        const pitch=sr/bestLag;
 
-        resolve({ pitch, rms, zcr, sc, rawRms, rawZcr, isSilent:false });
-      } catch(err) {
-        console.warn('Feature extraction failed, using neutral fallback:', err);
-        resolve({ pitch:122, rms:0.36, zcr:0.09, sc:2050, rawRms:0, rawZcr:0, isSilent:false });
+        resolve({pitch,rms,zcr,sc,rawRms,rawZcr,isSilent:false});
+      }catch(err){
+        console.warn('Feature extraction error:',err);
+        // NOTE: This fallback produces neutral-centroid values.
+        // If you always get 12.5%, check the browser console for this error.
+        resolve({pitch:122,rms:0.36,zcr:0.09,sc:2050,rawRms:0,rawZcr:0,isSilent:false});
       }
     };
     reader.readAsArrayBuffer(blob);
   });
 }
 
-/* ─── File upload ─── */
-let audioFeatures = null;
-const fileInput = document.getElementById('audio-file');
-const uploadZone = document.getElementById('upload-zone');
+// ─── Waveform canvas ─────────────────────────────────────────────────────────
+const canvas=document.getElementById('waveform'),cx=canvas.getContext('2d');
+let animFrame=null;
+function drawIdle(){
+  canvas.width=canvas.offsetWidth;cx.clearRect(0,0,canvas.width,canvas.height);
+  cx.strokeStyle='rgba(108,99,255,.25)';cx.lineWidth=1.5;cx.setLineDash([4,6]);
+  cx.beginPath();cx.moveTo(0,canvas.height/2);cx.lineTo(canvas.width,canvas.height/2);cx.stroke();
+  cx.setLineDash([]);
+}
+drawIdle();window.addEventListener('resize',drawIdle);
+function drawLive(an){
+  canvas.width=canvas.offsetWidth;const buf=new Uint8Array(an.frequencyBinCount);
+  (function f(){animFrame=requestAnimationFrame(f);an.getByteTimeDomainData(buf);
+    cx.clearRect(0,0,canvas.width,canvas.height);cx.strokeStyle='#6c63ff';cx.lineWidth=2;cx.beginPath();
+    buf.forEach((v,i)=>{const y=(v/128)*(canvas.height/2);i===0?cx.moveTo(0,y):cx.lineTo(i*canvas.width/buf.length,y);});
+    cx.stroke();})();
+}
 
-fileInput.addEventListener('change', () => {
-  const f = fileInput.files[0]; if (!f) return;
-  showFileName('✓ ' + f.name); audioFeatures = null;
-  extractFeatures(f).then(feat => { audioFeatures = feat; enableAnalyse(); });
+// ─── Mic recording ───────────────────────────────────────────────────────────
+let mediaRecorder=null,isRecording=false,audioFeatures=null;
+document.getElementById('mic-btn').addEventListener('click',async()=>{
+  if(!isRecording){
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      const ac=new(window.AudioContext||window.webkitAudioContext)();
+      const an=ac.createAnalyser();an.fftSize=256;
+      ac.createMediaStreamSource(stream).connect(an);
+      const chunks=[];
+      mediaRecorder=new MediaRecorder(stream);
+      mediaRecorder.ondataavailable=e=>chunks.push(e.data);
+      mediaRecorder.onstop=()=>{
+        const blob=new Blob(chunks,{type:'audio/webm'});
+        extractFeatures(blob).then(f=>{audioFeatures=f;enableAnalyse();});
+        stream.getTracks().forEach(t=>t.stop());
+        cancelAnimationFrame(animFrame);drawIdle();
+      };
+      mediaRecorder.start();isRecording=true;drawLive(an);
+      document.getElementById('mic-btn').classList.add('recording');
+      document.getElementById('mic-btn').textContent='⏹';
+      setStatus('Recording… click to stop','active');
+    }catch(e){setStatus('Microphone access denied — please allow access in browser settings','');}
+  }else{
+    mediaRecorder.stop();isRecording=false;
+    document.getElementById('mic-btn').classList.remove('recording');
+    document.getElementById('mic-btn').textContent='🎙️';
+    setStatus('Processing…','done');
+    setTimeout(()=>setStatus('Recording ready — click Analyse!','done'),1200);
+  }
+});
+function setStatus(m,c){const el=document.getElementById('mic-status');el.textContent=m;el.className='mic-status '+c;}
+
+// ─── File upload ─────────────────────────────────────────────────────────────
+const fileInput=document.getElementById('audio-file');
+const uploadZone=document.getElementById('upload-zone');
+fileInput.addEventListener('change',()=>{
+  const f=fileInput.files[0];if(!f)return;
+  showFN('✓ '+f.name);audioFeatures=null;
+  extractFeatures(f).then(feat=>{audioFeatures=feat;enableAnalyse();});
   clearPresets();
 });
-uploadZone.addEventListener('dragover',  e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
-uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
-uploadZone.addEventListener('drop', e => {
-  e.preventDefault(); uploadZone.classList.remove('drag-over');
-  const f = e.dataTransfer.files[0];
-  if (f && f.type.startsWith('audio/')) { fileInput.files = e.dataTransfer.files; fileInput.dispatchEvent(new Event('change')); }
+uploadZone.addEventListener('dragover',e=>{e.preventDefault();uploadZone.classList.add('drag-over');});
+uploadZone.addEventListener('dragleave',()=>uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop',e=>{
+  e.preventDefault();uploadZone.classList.remove('drag-over');
+  const f=e.dataTransfer.files[0];
+  if(f&&f.type.startsWith('audio/')){fileInput.files=e.dataTransfer.files;fileInput.dispatchEvent(new Event('change'));}
 });
-function showFileName(t) { const el=document.getElementById('file-name'); el.style.display='block'; el.textContent=t; }
+function showFN(t){const el=document.getElementById('file-name');el.style.display='block';el.textContent=t;}
 
-/* ─── Presets ─── */
-document.querySelectorAll('.preset-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    clearPresets(); btn.classList.add('active');
-    audioFeatures = {
-      pitch:parseFloat(btn.dataset.pitch), rms:parseFloat(btn.dataset.rms),
-      zcr:parseFloat(btn.dataset.zcr),     sc:parseFloat(btn.dataset.sc),
-      rawRms:null, rawZcr:null, isSilent:false,
+// ─── Presets ─────────────────────────────────────────────────────────────────
+document.querySelectorAll('.preset-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    clearPresets();btn.classList.add('active');
+    audioFeatures={
+      pitch:+btn.dataset.pitch,rms:+btn.dataset.rms,
+      zcr:+btn.dataset.zcr,sc:+btn.dataset.sc,
+      rawRms:null,rawZcr:null,isSilent:false
     };
-    showFileName('✓ Sample: ' + btn.textContent.trim());
+    showFN('✓ Sample: '+btn.textContent.trim());
     enableAnalyse();
   });
 });
-function clearPresets() { document.querySelectorAll('.preset-btn').forEach(b=>b.classList.remove('active')); }
-function enableAnalyse() { document.getElementById('analyse-btn').disabled = false; }
+function clearPresets(){document.querySelectorAll('.preset-btn').forEach(b=>b.classList.remove('active'));}
+function enableAnalyse(){document.getElementById('analyse-btn').disabled=false;}
 
-/* ─── Analyse ─── */
-document.getElementById('analyse-btn').addEventListener('click', () => {
-  if (!audioFeatures) return;
-  const { pitch, rms, zcr, sc, rawRms, rawZcr, isSilent } = audioFeatures;
-  const banner = document.getElementById('warn-banner');
-  if (isSilent || (rawRms !== null && rawRms < 0.005)) {
-    banner.style.display = 'block';
-    banner.textContent = '⚠️ Audio is very quiet or silent — speak clearly and close to the mic for accurate results.';
-  } else {
-    banner.style.display = 'none';
-  }
-  const scores = infer(pitch, rms, zcr, sc);
-  showResult(scores, pitch, rms, zcr, sc, rawRms, rawZcr);
+// ─── Analyse ─────────────────────────────────────────────────────────────────
+document.getElementById('analyse-btn').addEventListener('click',()=>{
+  if(!audioFeatures)return;
+  const{pitch,rms,zcr,sc,rawRms,rawZcr,isSilent}=audioFeatures;
+  const banner=document.getElementById('warn-banner');
+  if(isSilent||(rawRms!==null&&rawRms<0.005)){
+    banner.style.display='block';
+    banner.textContent='⚠️ Audio is very quiet or silent — speak clearly and close to the mic for accurate results.';
+  }else{banner.style.display='none';}
+  showResult(infer(pitch,rms,zcr,sc),pitch,rms,zcr,sc,rawRms,rawZcr);
 });
 
-function showResult(scores, pitch, rms, zcr, sc, rawRms, rawZcr) {
-  const sorted = Object.entries(scores).sort((a,b)=>b[1]-a[1]);
-  const [emotion, topScore] = sorted[0];
-  const isHigh = HIGH_STRESS.has(emotion);
+function showResult(scores,pitch,rms,zcr,sc,rawRms,rawZcr){
+  const sorted=Object.entries(scores).sort((a,b)=>b[1]-a[1]);
+  const[emotion,topScore]=sorted[0];
+  const isHigh=HIGH_STRESS.has(emotion);
 
-  const badge = document.getElementById('emotion-badge');
-  badge.style.background = isHigh
-    ? 'linear-gradient(135deg,rgba(245,101,101,0.2),rgba(237,137,54,0.1))'
-    : 'linear-gradient(135deg,rgba(72,187,120,0.15),rgba(108,99,255,0.1))';
-  badge.style.border = `1px solid ${isHigh ? 'rgba(245,101,101,0.3)' : 'rgba(72,187,120,0.3)'}`;
-  badge.innerHTML = `${EMOJI[emotion]} ${emotion[0].toUpperCase()+emotion.slice(1)} <span style="font-size:0.95rem;color:var(--muted);font-weight:400">(${(topScore*100).toFixed(1)}%)</span>`;
+  const badge=document.getElementById('emotion-badge');
+  badge.style.background=isHigh
+    ?'linear-gradient(135deg,rgba(245,101,101,.2),rgba(237,137,54,.1))'
+    :'linear-gradient(135deg,rgba(72,187,120,.15),rgba(108,99,255,.1))';
+  badge.style.border=`1px solid ${isHigh?'rgba(245,101,101,.3)':'rgba(72,187,120,.3)'}`;
+  badge.innerHTML=`${EMOJI[emotion]} ${emotion[0].toUpperCase()+emotion.slice(1)} <span style="font-size:.95rem;color:var(--muted);font-weight:400">(${(topScore*100).toFixed(1)}%)</span>`;
 
-  const grid = document.getElementById('conf-grid');
-  grid.innerHTML = '';
-  sorted.forEach(([em, pct]) => {
-    const row = document.createElement('div');
-    row.className = 'bar-row';
-    row.innerHTML = `<span>${EMOJI[em]} ${em}</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div><span>${(pct*100).toFixed(1)}%</span>`;
+  const grid=document.getElementById('conf-grid');grid.innerHTML='';
+  sorted.forEach(([em,pct])=>{
+    const row=document.createElement('div');row.className='bar-row';
+    row.innerHTML=`<span>${EMOJI[em]} ${em}</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div><span>${(pct*100).toFixed(1)}%</span>`;
     grid.appendChild(row);
-    setTimeout(() => row.querySelector('.bar-fill').style.width = (pct*100)+'%', 50);
+    setTimeout(()=>row.querySelector('.bar-fill').style.width=(pct*100)+'%',50);
   });
 
-  const stressVal = HIGH_STRESS.has(emotion) ? scores[emotion] : 0;
-  const level = stressVal > 0.5 ? 'high' : stressVal > 0.25 ? 'mid' : 'low';
-  document.getElementById('stress-box').style.background = STRESS_COLORS[level];
-  document.getElementById('stress-dot').style.background = STRESS_DOT[level];
-  document.getElementById('stress-text').textContent =
-    level==='high' ? '⚠️ High stress indicators detected in voice'
-    : level==='mid' ? '⚡ Moderate stress indicators present'
-    : '✅ Low stress — voice appears calm';
+  const sv=HIGH_STRESS.has(emotion)?scores[emotion]:0;
+  const level=sv>.5?'high':sv>.25?'mid':'low';
+  document.getElementById('stress-box').style.background=STRESS_COLORS[level];
+  document.getElementById('stress-dot').style.background=STRESS_DOT[level];
+  document.getElementById('stress-text').textContent=
+    level==='high'?'⚠️ High stress indicators detected in voice'
+    :level==='mid'?'⚡ Moderate stress indicators present'
+    :'✅ Low stress — voice appears calm';
 
-  const rawRmsStr = rawRms != null ? ` (raw: ${rawRms.toFixed(4)})` : '';
-  const rawZcrStr = rawZcr != null ? ` (raw: ${rawZcr.toFixed(5)})` : '';
-  document.getElementById('feat-grid').innerHTML = `
+  const rr=rawRms!=null?` (raw:${rawRms.toFixed(4)})`:'';
+  const rz=rawZcr!=null?` (raw:${rawZcr.toFixed(5)})`:'';
+  document.getElementById('feat-grid').innerHTML=`
     <div class="feat-box"><div class="label">Pitch (F0)</div><div class="value">${pitch.toFixed(0)} Hz</div></div>
-    <div class="feat-box"><div class="label">RMS Energy</div><div class="value">${rms.toFixed(3)}${rawRmsStr}</div></div>
-    <div class="feat-box"><div class="label">Zero Crossing Rate</div><div class="value">${zcr.toFixed(4)}${rawZcrStr}</div></div>
-    <div class="feat-box"><div class="label">Spectral Centroid</div><div class="value">${Math.round(sc)} Hz</div></div>
-  `;
+    <div class="feat-box"><div class="label">RMS Energy</div><div class="value">${rms.toFixed(3)}${rr}</div></div>
+    <div class="feat-box"><div class="label">Zero Crossing Rate</div><div class="value">${zcr.toFixed(4)}${rz}</div></div>
+    <div class="feat-box"><div class="label">Spectral Centroid</div><div class="value">${Math.round(sc)} Hz</div></div>`;
 
-  document.getElementById('result-card').style.display = 'block';
-  document.getElementById('feat-card').style.display   = 'block';
-  document.getElementById('result-card').scrollIntoView({ behavior:'smooth', block:'start' });
+  document.getElementById('result-card').style.display='block';
+  document.getElementById('feat-card').style.display='block';
+  document.getElementById('result-card').scrollIntoView({behavior:'smooth',block:'start'});
 }
 </script>
 </body>
