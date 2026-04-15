@@ -1,4 +1,4 @@
-#  🎙️ Speech Emotion & Stress Detection
+# 🎙️ Speech Emotion & Stress Detection
 
 > **Detect emotional state and stress from voice recordings** using 182 handcrafted audio features and classical ML.  
 > Trained on **RAVDESS** · 8 emotion classes · ~65–70% test accuracy (SVM, 5-fold CV)
