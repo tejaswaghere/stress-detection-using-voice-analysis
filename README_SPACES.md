@@ -32,7 +32,7 @@ scikit-learn>=1.3.0
 soundfile>=0.12.0
 ```
 
-### 3. Train and export your model first
+### 3. Train and export your model 
 
 If you haven't trained yet:
 ```bash
