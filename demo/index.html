@@ -1,400 +1,313 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Speech Emotion & Stress Detector</title>
-  <style>
-    :root {
-      --bg:#0f1117;--card:#1a1d27;--border:#2a2d3a;
-      --accent:#6c63ff;--accent2:#ff6584;--text:#e2e8f0;
-      --muted:#8892a4;--success:#48bb78;--warn:#ed8936;
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Voice Stress Detector</title>
+<meta name="description" content="Record your voice and get an emotion and vocal-stress reading from a WavLM-based model trained on RAVDESS." />
+<style>
+  :root {
+    --bg: #f7f7fb; --card: #ffffff; --border: #e3e3ee; --text: #1b1b2b; --muted: #6a6a80;
+    --accent: #6d4aff; --accent-soft: rgba(109, 74, 255, .1); --track: #ececf4;
+    --low: #16a34a; --moderate: #d97706; --high: #dc2626; --rec: #e11d48;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e0f16; --card: #171925; --border: #282b3b; --text: #e8e8f2; --muted: #9496ab;
+      --accent: #8b6cff; --accent-soft: rgba(139, 108, 255, .14); --track: #262838;
     }
-    *{box-sizing:border-box;margin:0;padding:0;}
-    body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);
-      min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:2rem 1rem;}
-    header{text-align:center;margin-bottom:2.5rem;}
-    header h1{font-size:2rem;font-weight:700;
-      background:linear-gradient(135deg,var(--accent),var(--accent2));
-      -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
-    header p{color:var(--muted);margin-top:.5rem;font-size:.95rem;}
-    .badge{display:inline-flex;align-items:center;gap:.4rem;
-      background:rgba(108,99,255,.15);border:1px solid rgba(108,99,255,.3);
-      border-radius:999px;padding:.25rem .75rem;font-size:.78rem;color:#a78bfa;margin-top:.75rem;}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;
-      padding:1.75rem;width:100%;max-width:580px;margin-bottom:1.25rem;}
-    .card h2{font-size:.85rem;font-weight:600;letter-spacing:.08em;
-      text-transform:uppercase;color:var(--muted);margin-bottom:1.25rem;}
-    .mic-area{display:flex;flex-direction:column;align-items:center;gap:1.25rem;}
-    .mic-btn{width:80px;height:80px;border-radius:50%;border:none;cursor:pointer;
-      display:flex;align-items:center;justify-content:center;font-size:2rem;
-      transition:transform .15s;background:linear-gradient(135deg,var(--accent),#9f7aea);}
-    .mic-btn:hover{transform:scale(1.07);}
-    .mic-btn.recording{background:linear-gradient(135deg,#e53e3e,var(--accent2));animation:pulse 1.2s infinite;}
-    @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(229,62,62,.5);}70%{box-shadow:0 0 0 18px rgba(229,62,62,0);}100%{box-shadow:0 0 0 0 rgba(229,62,62,0);}}
-    .mic-status{font-size:.9rem;color:var(--muted);text-align:center;min-height:1.2em;}
-    .mic-status.active{color:#fc8181;}.mic-status.done{color:var(--success);}
-    #waveform{width:100%;height:52px;border-radius:8px;background:rgba(108,99,255,.06);display:block;}
-    .upload-zone{border:2px dashed var(--border);border-radius:10px;padding:1.5rem;
-      text-align:center;cursor:pointer;transition:border-color .2s,background .2s;}
-    .upload-zone:hover,.upload-zone.drag-over{border-color:var(--accent);background:rgba(108,99,255,.05);}
-    .upload-zone input{display:none;}
-    .upload-zone p{color:var(--muted);font-size:.88rem;}
-    .upload-zone p strong{color:var(--text);}
-    #file-name{margin-top:.6rem;font-size:.82rem;color:var(--accent);display:none;}
-    .presets{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1rem;}
-    .preset-btn{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;
-      padding:.4rem .85rem;font-size:.82rem;color:var(--muted);cursor:pointer;transition:all .15s;}
-    .preset-btn:hover{background:rgba(108,99,255,.1);border-color:var(--accent);color:var(--text);}
-    .preset-btn.active{background:rgba(108,99,255,.2);border-color:var(--accent);color:#c4b5fd;}
-    #analyse-btn{width:100%;padding:.85rem;background:linear-gradient(135deg,var(--accent),#9f7aea);
-      border:none;border-radius:10px;color:#fff;font-size:1rem;font-weight:600;
-      cursor:pointer;transition:opacity .2s,transform .15s;margin-top:.5rem;}
-    #analyse-btn:hover:not(:disabled){opacity:.88;transform:translateY(-1px);}
-    #analyse-btn:disabled{opacity:.4;cursor:not-allowed;transform:none;}
-    #result-card{display:none;}
-    .emotion-badge{display:flex;align-items:center;justify-content:center;gap:.6rem;
-      padding:1rem 1.5rem;border-radius:12px;font-size:1.5rem;font-weight:700;
-      margin-bottom:1.25rem;text-align:center;}
-    .confidence-grid{display:flex;flex-direction:column;gap:.55rem;}
-    .bar-row{display:grid;grid-template-columns:90px 1fr 48px;align-items:center;gap:.5rem;font-size:.82rem;}
-    .bar-row span:first-child{color:var(--muted);text-align:right;}
-    .bar-track{height:7px;background:rgba(255,255,255,.07);border-radius:99px;overflow:hidden;}
-    .bar-fill{height:100%;border-radius:99px;transition:width .6s cubic-bezier(.4,0,.2,1);
-      background:linear-gradient(90deg,var(--accent),var(--accent2));}
-    .bar-row span:last-child{color:var(--muted);font-size:.78rem;}
-    .stress-indicator{margin-top:1.25rem;padding:.9rem 1rem;border-radius:10px;
-      display:flex;align-items:center;gap:.75rem;font-size:.9rem;}
-    .stress-indicator .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
-    .features-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:.75rem;}
-    .feat-box{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:.75rem 1rem;}
-    .feat-box .label{font-size:.75rem;color:var(--muted);margin-bottom:.25rem;}
-    .feat-box .value{font-size:1.05rem;font-weight:600;}
-    .warn-banner{background:rgba(237,137,54,.12);border:1px solid rgba(237,137,54,.3);
-      border-radius:8px;padding:.6rem .9rem;font-size:.82rem;color:var(--warn);margin-bottom:1rem;display:none;}
-    footer{margin-top:1rem;color:var(--muted);font-size:.78rem;text-align:center;}
-    footer a{color:var(--accent);text-decoration:none;}
-  </style>
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e0f16; --card: #171925; --border: #282b3b; --text: #e8e8f2; --muted: #9496ab;
+    --accent: #8b6cff; --accent-soft: rgba(139, 108, 255, .14); --track: #262838;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text);
+         line-height: 1.5; padding: 32px 16px 48px; }
+  main { max-width: 620px; margin: 0 auto; display: grid; gap: 16px; }
+  header { text-align: center; margin-bottom: 8px; }
+  h1 { font-size: 1.75rem; letter-spacing: -.01em; }
+  header p { color: var(--muted); margin-top: 6px; }
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 12px; }
+  .pill { font-size: .78rem; border: 1px solid var(--border); border-radius: 99px; padding: 2px 10px; color: var(--muted); }
+  .pill a { color: var(--accent); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 20px; }
+  .card h2 { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 14px; }
+  .rec-row { display: flex; align-items: center; gap: 16px; }
+  #rec-btn { width: 64px; height: 64px; flex-shrink: 0; border-radius: 50%; border: none; cursor: pointer;
+             background: var(--accent); color: #fff; display: grid; place-items: center; transition: transform .15s; }
+  #rec-btn:hover { transform: scale(1.05); }
+  #rec-btn:focus-visible { outline: 3px solid var(--accent-soft); outline-offset: 3px; }
+  #rec-btn.recording { background: var(--rec); animation: pulse 1.3s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(225, 29, 72, .45); } 70% { box-shadow: 0 0 0 14px rgba(225, 29, 72, 0); } 100% { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0); } }
+  #rec-btn svg { width: 26px; height: 26px; }
+  .rec-info { flex: 1; min-width: 0; }
+  #rec-status { font-weight: 600; }
+  #rec-hint { color: var(--muted); font-size: .88rem; }
+  canvas { width: 100%; height: 48px; display: block; margin-top: 14px; border-radius: 8px; background: var(--accent-soft); }
+  .or { text-align: center; color: var(--muted); font-size: .85rem; margin: 14px 0 10px; }
+  label.upload { display: block; border: 1.5px dashed var(--border); border-radius: 12px; padding: 14px; text-align: center;
+                 cursor: pointer; color: var(--muted); font-size: .9rem; transition: border-color .15s, background .15s; }
+  label.upload:hover, label.upload.drag { border-color: var(--accent); background: var(--accent-soft); }
+  label.upload input { display: none; }
+  #status { font-size: .9rem; color: var(--muted); text-align: center; min-height: 1.4em; }
+  #status.error { color: var(--high); }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent);
+             border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #result { display: none; }
+  .emo { display: flex; align-items: center; gap: 14px; }
+  .emo-icon { font-size: 48px; line-height: 1; }
+  .emo-label { font-size: 1.6rem; font-weight: 700; text-transform: capitalize; }
+  .emo-conf { color: var(--muted); font-size: .9rem; }
+  .gauge-head { display: flex; justify-content: space-between; font-size: .9rem; margin: 18px 0 6px; }
+  .gauge { height: 10px; border-radius: 99px; background: var(--track); overflow: hidden; }
+  .gauge-fill { height: 100%; border-radius: 99px; width: 0; transition: width .7s cubic-bezier(.4, 0, .2, 1); }
+  .bars { display: grid; gap: 8px; margin-top: 20px; }
+  .bar { display: grid; grid-template-columns: 96px 1fr 44px; align-items: center; gap: 10px; font-size: .85rem; }
+  .bar .name { color: var(--muted); text-transform: capitalize; }
+  .bar .track { height: 7px; background: var(--track); border-radius: 99px; overflow: hidden; }
+  .bar .fill { height: 100%; background: var(--accent); border-radius: 99px; width: 0; transition: width .6s; }
+  .bar .pct { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .bar.top .name, .bar.top .pct { color: var(--text); font-weight: 600; }
+  details { font-size: .9rem; color: var(--muted); }
+  details summary { cursor: pointer; color: var(--text); font-weight: 600; }
+  details p, details li { margin-top: 8px; }
+  details ul { padding-left: 18px; }
+  footer { text-align: center; font-size: .8rem; color: var(--muted); }
+  footer a, details a { color: var(--accent); }
+</style>
 </head>
 <body>
-<header>
-  <h1>🎙️ Stress & Emotion Detector</h1>
-  <p>Detect emotional state from your voice — runs entirely in your browser</p>
-  <div class="badge"><span>●</span> Trained on RAVDESS · 182 audio features · MFCC + Chroma + Spectral</div>
-</header>
+<main>
+  <header>
+    <h1>🎙️ Voice Stress Detector</h1>
+    <p>Say a sentence the way you feel it. The model listens to <em>how</em> you speak, not the words.</p>
+    <div class="pills">
+      <span class="pill">79% accuracy on unseen speakers · 8 emotions</span>
+      <span class="pill">WavLM + linear classifier</span>
+      <span class="pill"><a href="https://github.com/tejaswaghere/stress-detection-using-voice-analysis">GitHub ↗</a></span>
+    </div>
+  </header>
 
-<div class="card">
-  <h2>🎤 Live Recording</h2>
-  <div class="mic-area">
-    <canvas id="waveform"></canvas>
-    <button class="mic-btn" id="mic-btn">🎙️</button>
-    <p class="mic-status" id="mic-status">Click to record 3–5 seconds of speech</p>
-  </div>
-</div>
+  <section class="card" aria-labelledby="input-h">
+    <h2 id="input-h">Your voice</h2>
+    <div class="rec-row">
+      <button id="rec-btn" aria-label="Start recording">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
+      </button>
+      <div class="rec-info">
+        <div id="rec-status">Tap to record</div>
+        <div id="rec-hint">Speak for 2–10 seconds, then tap again. Try “I can't believe this is happening” angrily, then calmly.</div>
+      </div>
+    </div>
+    <canvas id="wave" aria-hidden="true"></canvas>
+    <div class="or">or</div>
+    <label class="upload" id="drop">
+      <input type="file" id="file" accept="audio/*" />
+      <strong>Upload an audio file</strong> (wav, mp3, m4a, ogg…)
+    </label>
+  </section>
 
-<div class="card">
-  <h2>📁 Upload Audio</h2>
-  <label class="upload-zone" id="upload-zone">
-    <input type="file" id="audio-file" accept="audio/*"/>
-    <p><strong>Drop a .wav / .mp3 file here</strong><br/>or click to browse</p>
-    <p id="file-name"></p>
-  </label>
-  <div class="presets">
-    <span style="font-size:.8rem;color:var(--muted);align-self:center">Try a sample:</span>
-    <button class="preset-btn" data-pitch="200" data-rms="0.82" data-zcr="0.28" data-sc="3900">😠 Angry</button>
-    <button class="preset-btn" data-pitch="112" data-rms="0.28" data-zcr="0.06" data-sc="1750">😌 Calm</button>
-    <button class="preset-btn" data-pitch="178" data-rms="0.58" data-zcr="0.14" data-sc="3100">😊 Happy</button>
-    <button class="preset-btn" data-pitch="215" data-rms="0.50" data-zcr="0.22" data-sc="4200">😨 Fearful</button>
-    <button class="preset-btn" data-pitch="92"  data-rms="0.22" data-zcr="0.04" data-sc="1350">😢 Sad</button>
-    <button class="preset-btn" data-pitch="122" data-rms="0.36" data-zcr="0.09" data-sc="2050">😐 Neutral</button>
-  </div>
-</div>
+  <div id="status" role="status" aria-live="polite"></div>
 
-<div style="width:100%;max-width:580px;margin-bottom:1.25rem;">
-  <button id="analyse-btn" disabled>Analyse Emotion</button>
-</div>
+  <section class="card" id="result" aria-live="polite">
+    <div class="emo">
+      <div class="emo-icon" id="r-icon"></div>
+      <div><div class="emo-label" id="r-emotion"></div><div class="emo-conf" id="r-conf"></div></div>
+    </div>
+    <div class="gauge-head"><span>Vocal stress index</span><strong id="r-stress"></strong></div>
+    <div class="gauge"><div class="gauge-fill" id="r-gauge"></div></div>
+    <div class="bars" id="r-bars"></div>
+  </section>
 
-<div class="card" id="result-card">
-  <h2>📊 Result</h2>
-  <div class="warn-banner" id="warn-banner"></div>
-  <div id="emotion-badge" class="emotion-badge"></div>
-  <div class="confidence-grid" id="conf-grid"></div>
-  <div class="stress-indicator" id="stress-box">
-    <div class="dot" id="stress-dot"></div>
-    <span id="stress-text"></span>
-  </div>
-</div>
+  <section class="card">
+    <details>
+      <summary>How it works & limitations</summary>
+      <p>Your audio is converted to 16 kHz mono in the browser and sent to the model on
+        <a id="space-link" href="https://huggingface.co/spaces/tejaswaghere/stress-detection">Hugging Face Spaces</a>.
+        There, silence is trimmed and volume normalised. A frozen <strong>WavLM</strong> speech model turns the audio
+        into an embedding, and a linear classifier trained on <strong>RAVDESS</strong> outputs 8 emotion probabilities.</p>
+      <p>The <strong>stress index</strong> weights those probabilities by how strongly each emotion reflects tense,
+        negative, high-arousal speech (angry and fearful count most, calm and neutral count zero).</p>
+      <ul>
+        <li>79% accuracy is measured on actors the model never heard. Real-world, natural speech is harder.</li>
+        <li>Trained on acted North-American English, so other accents, languages and noisy mics reduce accuracy.</li>
+        <li>Stress is inferred, not measured. This is not a medical or HR tool.</li>
+        <li>The free Space sleeps when idle. The first request may take about a minute while it wakes up.</li>
+      </ul>
+    </details>
+  </section>
 
-<div class="card" id="feat-card" style="display:none">
-  <h2>🔬Extracted Audio Features</h2>
-  <div class="features-grid" id="feat-grid"></div>
-</div>
+  <footer>Built with librosa, WavLM, scikit-learn and Gradio · <a href="https://zenodo.org/record/1188976">RAVDESS</a> (CC BY-NC-SA 4.0)</footer>
+</main>
 
-<footer>
-  Model trained on <a href="https://zenodo.org/record/1188976" target="_blank">RAVDESS</a> ·
-  Features extracted with librosa ·
-  <a href="https://github.com/tejaswaghere/stress-detection-using-voice-analysis" target="_blank">View on GitHub</a>
-</footer>
+<script type="module">
+import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client@2.7.1/dist/browser.js";
 
-<script>
-// ─── Constants ───────────────────────────────────────────────────────────────
-const EMOJI={neutral:'😐',calm:'😌',happy:'😊',sad:'😔',angry:'😠',fearful:'😨',disgust:'🤢',surprised:'😲'};
-const HIGH_STRESS=new Set(['angry','fearful','disgust','surprised']);
-const STRESS_COLORS={low:'rgba(72,187,120,.15)',mid:'rgba(237,137,54,.15)',high:'rgba(245,101,101,.15)'};
-const STRESS_DOT={low:'#48bb78',mid:'#ed8936',high:'#f56565'};
+// ?space=owner/name or ?space=http://127.0.0.1:7860/ for local testing
+const SPACE = new URLSearchParams(location.search).get("space") || "tejaswaghere/stress-detection";
+const EMOJI = { neutral: "😐", calm: "😌", happy: "😊", sad: "😢", angry: "😠", fearful: "😨", disgust: "🤢", surprised: "😲" };
+const TARGET_SR = 16000, MAX_SECONDS = 30;
 
-// ─── Emotion centroids in [pitch_hz, rms_norm, zcr_norm, sc_hz] space ───────
-// Derived from published RAVDESS acoustic analysis.
-// rms_norm  = raw_rms * 8  (typical speech 0.03–0.10 maps to 0.24–0.80)
-// zcr_norm  = raw_zcr * 30 (typical speech 0.002–0.009 maps to 0.06–0.27)
-const C = {
-  neutral:  {c:[122,0.36,0.090,2050], s:[30,0.13,0.045,550]},
-  calm:     {c:[112,0.27,0.060,1750], s:[25,0.11,0.035,480]},
-  happy:    {c:[178,0.60,0.140,3100], s:[35,0.16,0.050,650]},
-  sad:      {c:[ 92,0.22,0.040,1350], s:[20,0.09,0.030,420]},
-  angry:    {c:[200,0.82,0.280,3900], s:[40,0.14,0.065,680]},
-  fearful:  {c:[215,0.50,0.220,4200], s:[40,0.17,0.065,720]},
-  disgust:  {c:[160,0.55,0.180,3200], s:[35,0.17,0.065,620]},
-  surprised:{c:[185,0.65,0.170,3500], s:[40,0.17,0.060,680]},
-};
-const W=[0.55,1.5,1.2,1.4]; // [pitch, rms, zcr, sc] — rms+sc weighted highest
+const $ = (id) => document.getElementById(id);
+const recBtn = $("rec-btn"), statusEl = $("status"), canvas = $("wave"), ctx2d = canvas.getContext("2d");
+let client = null, recorder = null, stream = null, chunks = [], analyser = null, raf = 0, recStart = 0, timer = 0;
 
-function infer(pitch,rms,zcr,sc){
-  const inp=[pitch,rms,zcr,sc];
-  // Compute weighted Gaussian similarity to each centroid
-  const raw={};
-  for(const[em,{c,s}]of Object.entries(C)){
-    let score=1;
-    for(let i=0;i<4;i++){const z=(inp[i]-c[i])/s[i];score*=Math.pow(Math.exp(-.5*z*z),W[i]);}
-    raw[em]=score;
+function setStatus(msg, { busy = false, error = false } = {}) {
+  statusEl.className = error ? "error" : "";
+  statusEl.innerHTML = "";
+  if (busy) { const s = document.createElement("span"); s.className = "spinner"; statusEl.appendChild(s); }
+  statusEl.appendChild(document.createTextNode(msg));
+}
+
+async function getClient() {
+  if (!client) {
+    setStatus("Connecting to the model. A sleeping Space can take ~1 min to wake…", { busy: true });
+    client = await Client.connect(SPACE);
   }
-  // Softmax with temperature T=0.3 to sharpen the winner
-  const T=0.3;
-  const logits=Object.fromEntries(Object.entries(raw).map(([k,v])=>[k,Math.log(v+1e-12)/T]));
-  const maxL=Math.max(...Object.values(logits));
-  const exps=Object.fromEntries(Object.entries(logits).map(([k,v])=>[k,Math.exp(v-maxL)]));
-  const sum=Object.values(exps).reduce((a,b)=>a+b,0);
-  return Object.fromEntries(Object.entries(exps).map(([k,v])=>[k,v/sum]));
+  return client;
+}
+getClient().then(() => setStatus("Model ready.")).catch(() => { client = null; setStatus(""); });
+
+// ── Audio → 16 kHz mono WAV ──────────────────────────────────────────────────
+async function toWav(blob) {
+  const ac = new (window.AudioContext || window.webkitAudioContext)();
+  const decoded = await ac.decodeAudioData(await blob.arrayBuffer());
+  ac.close();
+  const n = Math.min(Math.ceil(decoded.duration * TARGET_SR), MAX_SECONDS * TARGET_SR);
+  const off = new OfflineAudioContext(1, n, TARGET_SR);
+  const src = off.createBufferSource();
+  src.buffer = decoded; src.connect(off.destination); src.start();
+  const pcm = (await off.startRendering()).getChannelData(0);
+
+  const buf = new ArrayBuffer(44 + pcm.length * 2), v = new DataView(buf);
+  const w = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  w(0, "RIFF"); v.setUint32(4, 36 + pcm.length * 2, true); w(8, "WAVE"); w(12, "fmt ");
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, TARGET_SR, true); v.setUint32(28, TARGET_SR * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  w(36, "data"); v.setUint32(40, pcm.length * 2, true);
+  for (let i = 0; i < pcm.length; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, pcm[i])) * 0x7fff, true);
+  return { wav: new Blob([buf], { type: "audio/wav" }), pcm };
 }
 
-// ─── Feature extraction — 100% synchronous, no OfflineAudioContext ───────────
-// Previous versions used OfflineAudioContext.startRendering() which caused a
-// race condition: getFloatFrequencyData() ran before rendering completed,
-// returning -Infinity for all bins → sc fallback = 2050 → same as neutral
-// centroid → all Gaussians equal → softmax = 12.5% each.
-// 
-// This version does everything on the raw Float32Array synchronously.
-async function extractFeatures(blob){
-  return new Promise(resolve=>{
-    const reader=new FileReader();
-    reader.onload=async e=>{
-      try{
-        const ac=new(window.AudioContext||window.webkitAudioContext)();
-        const ab=await ac.decodeAudioData(e.target.result);
-        const d=ab.getChannelData(0);
-        const sr=ab.sampleRate;
-        const N=d.length;
-
-        // 1. RMS — full clip
-        let sq=0; for(let i=0;i<N;i++) sq+=d[i]*d[i];
-        const rawRms=Math.sqrt(sq/N);
-        const rms=Math.min(1,rawRms*8);
-
-        // Silence guard
-        if(rawRms<0.005){
-          resolve({pitch:122,rms:0.36,zcr:0.09,sc:2050,rawRms,rawZcr:0,isSilent:true});
-          return;
-        }
-
-        // 2. ZCR — full clip
-        let zc=0; for(let i=1;i<N;i++) if((d[i]>=0)!==(d[i-1]>=0)) zc++;
-        const rawZcr=zc/N;
-        const zcr=Math.min(1,rawZcr*30);
-
-        // 3. Spectral centroid — synchronous DFT on 512-sample mid-clip window
-        // Small window = fast; enough for spectral centroid estimation.
-        // Hann window applied to reduce leakage.
-        const SC_N=512;
-        const scStart=Math.max(0,Math.floor(N/2)-Math.floor(SC_N/2));
-        const seg=d.slice(scStart,scStart+SC_N);
-        let wSum=0,mSum=0;
-        for(let k=1;k<SC_N/2;k++){
-          let re=0,im=0;
-          for(let n=0;n<SC_N;n++){
-            const hann=0.5-0.5*Math.cos(2*Math.PI*n/(SC_N-1));
-            const ang=2*Math.PI*k*n/SC_N;
-            re+=seg[n]*hann*Math.cos(ang);
-            im-=seg[n]*hann*Math.sin(ang);
-          }
-          const mag=Math.sqrt(re*re+im*im);
-          const freq=k*sr/SC_N;
-          wSum+=freq*mag; mSum+=mag;
-        }
-        const sc=mSum>1e-6?wSum/mSum:2050;
-
-        // 4. Pitch — autocorrelation on 1024-sample mid-clip window
-        const P_N=1024;
-        const pStart=Math.max(0,Math.floor(N/2)-Math.floor(P_N/2));
-        const pw=d.slice(pStart,pStart+P_N);
-        const minLag=Math.floor(sr/300),maxLag=Math.min(Math.floor(sr/80),P_N-1);
-        let bestLag=minLag,bestCorr=-Infinity;
-        for(let lag=minLag;lag<=maxLag;lag++){
-          let corr=0;
-          for(let i=0;i<P_N-lag;i++) corr+=pw[i]*pw[i+lag];
-          if(corr>bestCorr){bestCorr=corr;bestLag=lag;}
-        }
-        const pitch=sr/bestLag;
-
-        resolve({pitch,rms,zcr,sc,rawRms,rawZcr,isSilent:false});
-      }catch(err){
-        console.warn('Feature extraction error:',err);
-        // NOTE: This fallback produces neutral-centroid values.
-        // If you always get 12.5%, check the browser console for this error.
-        resolve({pitch:122,rms:0.36,zcr:0.09,sc:2050,rawRms:0,rawZcr:0,isSilent:false});
-      }
-    };
-    reader.readAsArrayBuffer(blob);
-  });
-}
-
-// ─── Waveform canvas ─────────────────────────────────────────────────────────
-const canvas=document.getElementById('waveform'),cx=canvas.getContext('2d');
-let animFrame=null;
-function drawIdle(){
-  canvas.width=canvas.offsetWidth;cx.clearRect(0,0,canvas.width,canvas.height);
-  cx.strokeStyle='rgba(108,99,255,.25)';cx.lineWidth=1.5;cx.setLineDash([4,6]);
-  cx.beginPath();cx.moveTo(0,canvas.height/2);cx.lineTo(canvas.width,canvas.height/2);cx.stroke();
-  cx.setLineDash([]);
-}
-drawIdle();window.addEventListener('resize',drawIdle);
-function drawLive(an){
-  canvas.width=canvas.offsetWidth;const buf=new Uint8Array(an.frequencyBinCount);
-  (function f(){animFrame=requestAnimationFrame(f);an.getByteTimeDomainData(buf);
-    cx.clearRect(0,0,canvas.width,canvas.height);cx.strokeStyle='#6c63ff';cx.lineWidth=2;cx.beginPath();
-    buf.forEach((v,i)=>{const y=(v/128)*(canvas.height/2);i===0?cx.moveTo(0,y):cx.lineTo(i*canvas.width/buf.length,y);});
-    cx.stroke();})();
-}
-
-// ─── Mic recording ───────────────────────────────────────────────────────────
-let mediaRecorder=null,isRecording=false,audioFeatures=null;
-document.getElementById('mic-btn').addEventListener('click',async()=>{
-  if(!isRecording){
-    try{
-      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-      const ac=new(window.AudioContext||window.webkitAudioContext)();
-      const an=ac.createAnalyser();an.fftSize=256;
-      ac.createMediaStreamSource(stream).connect(an);
-      const chunks=[];
-      mediaRecorder=new MediaRecorder(stream);
-      mediaRecorder.ondataavailable=e=>chunks.push(e.data);
-      mediaRecorder.onstop=()=>{
-        const blob=new Blob(chunks,{type:'audio/webm'});
-        extractFeatures(blob).then(f=>{audioFeatures=f;enableAnalyse();});
-        stream.getTracks().forEach(t=>t.stop());
-        cancelAnimationFrame(animFrame);drawIdle();
-      };
-      mediaRecorder.start();isRecording=true;drawLive(an);
-      document.getElementById('mic-btn').classList.add('recording');
-      document.getElementById('mic-btn').textContent='⏹';
-      setStatus('Recording… click to stop','active');
-    }catch(e){setStatus('Microphone access denied — please allow access in browser settings','');}
-  }else{
-    mediaRecorder.stop();isRecording=false;
-    document.getElementById('mic-btn').classList.remove('recording');
-    document.getElementById('mic-btn').textContent='🎙️';
-    setStatus('Processing…','done');
-    setTimeout(()=>setStatus('Recording ready — click Analyse!','done'),1200);
+function drawStatic(pcm) {
+  const W = (canvas.width = canvas.clientWidth * devicePixelRatio), H = (canvas.height = canvas.clientHeight * devicePixelRatio);
+  ctx2d.clearRect(0, 0, W, H);
+  ctx2d.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--accent");
+  const step = Math.max(1, Math.floor(pcm.length / W));
+  for (let x = 0; x < W; x++) {
+    let peak = 0;
+    for (let i = x * step; i < (x + 1) * step && i < pcm.length; i++) peak = Math.max(peak, Math.abs(pcm[i]));
+    const h = Math.max(1, peak * H);
+    ctx2d.fillRect(x, (H - h) / 2, 1, h);
   }
-});
-function setStatus(m,c){const el=document.getElementById('mic-status');el.textContent=m;el.className='mic-status '+c;}
-
-// ─── File upload ─────────────────────────────────────────────────────────────
-const fileInput=document.getElementById('audio-file');
-const uploadZone=document.getElementById('upload-zone');
-fileInput.addEventListener('change',()=>{
-  const f=fileInput.files[0];if(!f)return;
-  showFN('✓ '+f.name);audioFeatures=null;
-  extractFeatures(f).then(feat=>{audioFeatures=feat;enableAnalyse();});
-  clearPresets();
-});
-uploadZone.addEventListener('dragover',e=>{e.preventDefault();uploadZone.classList.add('drag-over');});
-uploadZone.addEventListener('dragleave',()=>uploadZone.classList.remove('drag-over'));
-uploadZone.addEventListener('drop',e=>{
-  e.preventDefault();uploadZone.classList.remove('drag-over');
-  const f=e.dataTransfer.files[0];
-  if(f&&f.type.startsWith('audio/')){fileInput.files=e.dataTransfer.files;fileInput.dispatchEvent(new Event('change'));}
-});
-function showFN(t){const el=document.getElementById('file-name');el.style.display='block';el.textContent=t;}
-
-// ─── Presets ─────────────────────────────────────────────────────────────────
-document.querySelectorAll('.preset-btn').forEach(btn=>{
-  btn.addEventListener('click',()=>{
-    clearPresets();btn.classList.add('active');
-    audioFeatures={
-      pitch:+btn.dataset.pitch,rms:+btn.dataset.rms,
-      zcr:+btn.dataset.zcr,sc:+btn.dataset.sc,
-      rawRms:null,rawZcr:null,isSilent:false
-    };
-    showFN('✓ Sample: '+btn.textContent.trim());
-    enableAnalyse();
-  });
-});
-function clearPresets(){document.querySelectorAll('.preset-btn').forEach(b=>b.classList.remove('active'));}
-function enableAnalyse(){document.getElementById('analyse-btn').disabled=false;}
-
-// ─── Analyse ─────────────────────────────────────────────────────────────────
-document.getElementById('analyse-btn').addEventListener('click',()=>{
-  if(!audioFeatures)return;
-  const{pitch,rms,zcr,sc,rawRms,rawZcr,isSilent}=audioFeatures;
-  const banner=document.getElementById('warn-banner');
-  if(isSilent||(rawRms!==null&&rawRms<0.005)){
-    banner.style.display='block';
-    banner.textContent='⚠️ Audio is very quiet or silent — speak clearly and close to the mic for accurate results.';
-  }else{banner.style.display='none';}
-  showResult(infer(pitch,rms,zcr,sc),pitch,rms,zcr,sc,rawRms,rawZcr);
-});
-
-function showResult(scores,pitch,rms,zcr,sc,rawRms,rawZcr){
-  const sorted=Object.entries(scores).sort((a,b)=>b[1]-a[1]);
-  const[emotion,topScore]=sorted[0];
-  const isHigh=HIGH_STRESS.has(emotion);
-
-  const badge=document.getElementById('emotion-badge');
-  badge.style.background=isHigh
-    ?'linear-gradient(135deg,rgba(245,101,101,.2),rgba(237,137,54,.1))'
-    :'linear-gradient(135deg,rgba(72,187,120,.15),rgba(108,99,255,.1))';
-  badge.style.border=`1px solid ${isHigh?'rgba(245,101,101,.3)':'rgba(72,187,120,.3)'}`;
-  badge.innerHTML=`${EMOJI[emotion]} ${emotion[0].toUpperCase()+emotion.slice(1)} <span style="font-size:.95rem;color:var(--muted);font-weight:400">(${(topScore*100).toFixed(1)}%)</span>`;
-
-  const grid=document.getElementById('conf-grid');grid.innerHTML='';
-  sorted.forEach(([em,pct])=>{
-    const row=document.createElement('div');row.className='bar-row';
-    row.innerHTML=`<span>${EMOJI[em]} ${em}</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div><span>${(pct*100).toFixed(1)}%</span>`;
-    grid.appendChild(row);
-    setTimeout(()=>row.querySelector('.bar-fill').style.width=(pct*100)+'%',50);
-  });
-
-  const sv=HIGH_STRESS.has(emotion)?scores[emotion]:0;
-  const level=sv>.5?'high':sv>.25?'mid':'low';
-  document.getElementById('stress-box').style.background=STRESS_COLORS[level];
-  document.getElementById('stress-dot').style.background=STRESS_DOT[level];
-  document.getElementById('stress-text').textContent=
-    level==='high'?'⚠️ High stress indicators detected in voice'
-    :level==='mid'?'⚡ Moderate stress indicators present'
-    :'✅ Low stress — voice appears calm';
-
-  const rr=rawRms!=null?` (raw:${rawRms.toFixed(4)})`:'';
-  const rz=rawZcr!=null?` (raw:${rawZcr.toFixed(5)})`:'';
-  document.getElementById('feat-grid').innerHTML=`
-    <div class="feat-box"><div class="label">Pitch (F0)</div><div class="value">${pitch.toFixed(0)} Hz</div></div>
-    <div class="feat-box"><div class="label">RMS Energy</div><div class="value">${rms.toFixed(3)}${rr}</div></div>
-    <div class="feat-box"><div class="label">Zero Crossing Rate</div><div class="value">${zcr.toFixed(4)}${rz}</div></div>
-    <div class="feat-box"><div class="label">Spectral Centroid</div><div class="value">${Math.round(sc)} Hz</div></div>`;
-
-  document.getElementById('result-card').style.display='block';
-  document.getElementById('feat-card').style.display='block';
-  document.getElementById('result-card').scrollIntoView({behavior:'smooth',block:'start'});
 }
+
+// ── Analysis ─────────────────────────────────────────────────────────────────
+async function analyze(blob) {
+  try {
+    setStatus("Preparing audio…", { busy: true });
+    const { wav, pcm } = await toWav(blob);
+    drawStatic(pcm);
+    if (pcm.length < TARGET_SR * 0.5) throw new Error("That clip is too short. Please record at least 2 seconds.");
+    const c = await getClient();
+    setStatus("Analysing…", { busy: true });
+    const res = await c.predict("/analyze", { audio_path: wav });
+    const out = res.data[res.data.length - 1];  // last output is the JSON summary
+    render(out);
+    setStatus("");
+  } catch (err) {
+    const msg = (err && (err.message || err.title)) || String(err);
+    setStatus(msg.includes("Too little speech") || msg.includes("silent") || msg.includes("too short")
+      ? msg : `Couldn't analyse the audio: ${msg}`, { error: true });
+  }
+}
+
+function render(r) {
+  $("r-icon").textContent = EMOJI[r.emotion] || "🎙️";
+  $("r-emotion").textContent = r.emotion;
+  $("r-conf").textContent = `${Math.round(r.confidence * 100)}% confidence`;
+  const color = getComputedStyle(document.documentElement).getPropertyValue(`--${r.stress_level}`);
+  $("r-stress").textContent = `${Math.round(r.stress_index)}/100 · ${r.stress_level}`;
+  $("r-stress").style.color = color;
+  const gauge = $("r-gauge");
+  gauge.style.background = color;
+  gauge.style.width = "0";
+
+  const bars = $("r-bars");
+  bars.replaceChildren();
+  Object.entries(r.probabilities).sort((a, b) => b[1] - a[1]).forEach(([emo, p], i) => {
+    const row = document.createElement("div");
+    row.className = "bar" + (i === 0 ? " top" : "");
+    const name = document.createElement("span"); name.className = "name"; name.textContent = `${EMOJI[emo] || ""} ${emo}`;
+    const track = document.createElement("div"); track.className = "track";
+    const fill = document.createElement("div"); fill.className = "fill"; track.appendChild(fill);
+    const pct = document.createElement("span"); pct.className = "pct"; pct.textContent = `${Math.round(p * 100)}%`;
+    row.append(name, track, pct);
+    bars.appendChild(row);
+    requestAnimationFrame(() => (fill.style.width = `${p * 100}%`));
+  });
+  $("result").style.display = "block";
+  requestAnimationFrame(() => (gauge.style.width = `${r.stress_index}%`));
+  $("result").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+// ── Recording ────────────────────────────────────────────────────────────────
+function drawLive() {
+  const W = (canvas.width = canvas.clientWidth * devicePixelRatio), H = (canvas.height = canvas.clientHeight * devicePixelRatio);
+  const data = new Uint8Array(analyser.fftSize);
+  analyser.getByteTimeDomainData(data);
+  ctx2d.clearRect(0, 0, W, H);
+  ctx2d.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--rec");
+  ctx2d.lineWidth = 2 * devicePixelRatio;
+  ctx2d.beginPath();
+  data.forEach((d, i) => { const x = (i / data.length) * W, y = (d / 255) * H; i ? ctx2d.lineTo(x, y) : ctx2d.moveTo(x, y); });
+  ctx2d.stroke();
+  raf = requestAnimationFrame(drawLive);
+}
+
+async function startRecording() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  } catch {
+    setStatus("Microphone access was blocked. Allow it in your browser, or upload a file instead.", { error: true });
+    return;
+  }
+  const ac = new AudioContext();
+  analyser = ac.createAnalyser(); analyser.fftSize = 1024;
+  ac.createMediaStreamSource(stream).connect(analyser);
+  chunks = [];
+  recorder = new MediaRecorder(stream);
+  recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+  recorder.onstop = () => {
+    cancelAnimationFrame(raf); clearInterval(timer); ac.close();
+    stream.getTracks().forEach((t) => t.stop());
+    recBtn.classList.remove("recording"); recBtn.setAttribute("aria-label", "Start recording");
+    $("rec-status").textContent = "Tap to record again";
+    analyze(new Blob(chunks, { type: recorder.mimeType }));
+  };
+  recorder.start();
+  recStart = Date.now();
+  recBtn.classList.add("recording"); recBtn.setAttribute("aria-label", "Stop recording");
+  $("rec-status").textContent = "Recording… 0 s";
+  timer = setInterval(() => {
+    const s = Math.floor((Date.now() - recStart) / 1000);
+    $("rec-status").textContent = `Recording… ${s} s`;
+    if (s >= MAX_SECONDS) recorder.stop();
+  }, 250);
+  setStatus("");
+  drawLive();
+}
+
+recBtn.addEventListener("click", () => (recorder && recorder.state === "recording" ? recorder.stop() : startRecording()));
+
+// ── Upload ───────────────────────────────────────────────────────────────────
+const drop = $("drop");
+$("file").addEventListener("change", (e) => e.target.files[0] && analyze(e.target.files[0]));
+["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("drag"); }));
+["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("drag"); }));
+drop.addEventListener("drop", (e) => e.dataTransfer.files[0] && analyze(e.dataTransfer.files[0]));
 </script>
 </body>
 </html>

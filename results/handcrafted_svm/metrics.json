@@ -1,0 +1,38 @@
+{
+  "features": "handcrafted",
+  "model": "svm",
+  "backbone": null,
+  "layers": null,
+  "n_clips": 1440,
+  "n_features": 376,
+  "evaluation": "6-fold GroupKFold by actor (speaker-independent)",
+  "accuracy": 0.5618,
+  "accuracy_fold_std": 0.0478,
+  "balanced_accuracy": 0.5495,
+  "macro_f1": 0.5489,
+  "accuracy_random_split_leaky": 0.6868,
+  "per_class_f1": {
+    "neutral": 0.3646,
+    "calm": 0.6216,
+    "happy": 0.564,
+    "sad": 0.3476,
+    "angry": 0.6618,
+    "fearful": 0.5477,
+    "disgust": 0.599,
+    "surprised": 0.6848
+  },
+  "final_fit_excludes_actors": [
+    23,
+    24
+  ],
+  "stress_weights": {
+    "angry": 1.0,
+    "fearful": 1.0,
+    "disgust": 0.7,
+    "sad": 0.45,
+    "surprised": 0.35,
+    "happy": 0.1,
+    "neutral": 0.0,
+    "calm": 0.0
+  }
+}

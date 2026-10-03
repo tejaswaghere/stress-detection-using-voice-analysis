@@ -1,29 +1,41 @@
 """
-features.py — Audio feature extraction for emotion/stress detection.
+features.py — Audio loading, preprocessing and handcrafted feature extraction.
 
-What this file does:
-  - Loads .wav files using librosa
-  - Extracts a rich set of audio features (MFCCs, deltas, chroma, spectral contrast, mel spectrogram, ZCR, RMS)
-  - Parses emotion labels from RAVDESS filenames
-  - Walks the dataset directory and builds a (features, labels) array pair
-  - Caches the result to .npy files so re-runs are instant
+This module is the single source of truth for turning audio into model input.
+Training (src/train.py), inference (src/predict.py) and the Gradio app all call
+the functions here, so the features a model sees at serving time are exactly
+the features it was trained on.
 
-Why each feature matters:
-  MFCCs           — Represent the "shape" of the vocal tract; great for distinguishing phonemes and emotion tone
-  Delta-MFCCs     — Rate of change of MFCCs over time; captures dynamics (e.g. rising anger vs flat neutral)
-  Delta²-MFCCs    — Acceleration of change; adds temporal texture
-  Chroma          — Pitch class energy; helps distinguish tonal quality across emotions
-  Spectral Contrast — Difference between peaks/valleys in spectrum; textures that differentiate breathy vs sharp speech
-  Mel Spectrogram — Perceptually-scaled frequency energy; good basis for CNN input
-  ZCR             — Zero-crossing rate; higher in consonant-heavy or noisy/angry speech
-  RMS Energy      — Loudness; stressed/angry speech is louder, sad speech softer
+Preprocessing (applied to every clip, training and inference alike):
+  1. Resample to 16 kHz mono
+  2. Trim leading/trailing silence (RAVDESS clips have ~1 s of silence; mic
+     recordings have arbitrary amounts — without trimming, clip duration and
+     silence ratio leak into the features)
+  3. Peak-normalise, so microphone gain does not masquerade as "loud = angry"
+
+Handcrafted features (mean + std pooled over frames):
+  MFCC (40) + Δ (40) + Δ² (40)  — vocal-tract shape and how it moves
+  Log-mel spectrogram (40)       — perceptual spectral energy
+  Spectral contrast (7)          — peak/valley ratio (breathy vs. pressed voice)
+  Chroma (12)                    — pitch-class energy
+  Centroid, bandwidth, roll-off, flatness, ZCR, RMS-dB (6) — brightness, noisiness, loudness
+  + 5 pitch statistics (log-F0 mean/std/range, voiced ratio, jitter proxy)
+  + speech duration
 """
 
-import numpy as np
-import librosa
+from __future__ import annotations
+
 import os
 from pathlib import Path
 
+import librosa
+import numpy as np
+
+SAMPLE_RATE = 16000
+TRIM_TOP_DB = 30
+MIN_SECONDS = 0.5
+MAX_SECONDS = 30.0
+FEATURE_VERSION = "handcrafted-v3"
 
 EMOTION_MAP = {
     '01': 'neutral',
@@ -35,148 +47,205 @@ EMOTION_MAP = {
     '07': 'disgust',
     '08': 'surprised',
 }
+EMOTIONS = list(EMOTION_MAP.values())
+EMOTION_TO_INT = {e: i for i, e in enumerate(EMOTIONS)}
+INT_TO_EMOTION = {i: e for e, i in EMOTION_TO_INT.items()}
 
-EMOTION_TO_INT = {v: i for i, v in enumerate(EMOTION_MAP.values())}
-INT_TO_EMOTION = {v: k for k, v in EMOTION_TO_INT.items()}
+_N_FFT = 512
+_HOP = 160  # 10 ms at 16 kHz
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RAVDESS metadata
+# ─────────────────────────────────────────────────────────────────────────────
+
+def parse_ravdess_filename(filename: str) -> dict | None:
+    """
+    RAVDESS filenames encode metadata: 03-01-05-01-02-02-12.wav
+      modality-channel-EMOTION-INTENSITY-statement-repetition-ACTOR
+    Returns {'emotion', 'intensity', 'actor'} or None if the name doesn't parse.
+    """
+    parts = Path(filename).stem.split('-')
+    if len(parts) != 7 or parts[2] not in EMOTION_MAP:
+        return None
+    try:
+        actor = int(parts[6])
+    except ValueError:
+        return None
+    return {
+        'emotion': EMOTION_MAP[parts[2]],
+        'intensity': 'strong' if parts[3] == '02' else 'normal',
+        'actor': actor,
+    }
 
 
 def get_emotion_from_filename(filename: str) -> str:
+    """Return the emotion label encoded in a RAVDESS filename, or 'unknown'."""
+    meta = parse_ravdess_filename(filename)
+    return meta['emotion'] if meta else 'unknown'
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Audio loading
+# ─────────────────────────────────────────────────────────────────────────────
+
+def preprocess(y: np.ndarray, sr: int) -> np.ndarray:
+    """Resample to 16 kHz mono, trim silence, peak-normalise. Raises ValueError on unusable audio."""
+    y = np.asarray(y)
+    if np.issubdtype(y.dtype, np.integer):
+        y = y / np.iinfo(y.dtype).max
+    y = y.astype(np.float32)
+    if y.ndim > 1:
+        # Gradio numpy audio is (samples, channels); librosa expects (channels, samples)
+        y = y.mean(axis=1) if y.shape[0] > y.shape[1] else y.mean(axis=0)
+    if sr != SAMPLE_RATE:
+        y = librosa.resample(y, orig_sr=sr, target_sr=SAMPLE_RATE)
+    y = y[: int(MAX_SECONDS * SAMPLE_RATE * 2)]  # bound work before trimming
+
+    peak = float(np.max(np.abs(y))) if y.size else 0.0
+    if peak < 1e-4:
+        raise ValueError("The recording is silent — check your microphone and try again.")
+
+    y, _ = librosa.effects.trim(y, top_db=TRIM_TOP_DB)
+    if len(y) < MIN_SECONDS * SAMPLE_RATE:
+        raise ValueError(f"Too little speech detected (< {MIN_SECONDS} s). Please record at least 2 seconds.")
+    y = y[: int(MAX_SECONDS * SAMPLE_RATE)]
+    return y / np.max(np.abs(y))
+
+
+def load_audio(path: str | os.PathLike) -> np.ndarray:
+    """Load any audio file librosa can read and return preprocessed 16 kHz audio."""
+    y, sr = librosa.load(path, sr=SAMPLE_RATE, mono=True)
+    return preprocess(y, sr)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Handcrafted features
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _pool(m: np.ndarray) -> np.ndarray:
+    return np.concatenate([m.mean(axis=1), m.std(axis=1)])
+
+
+def pitch_track(y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Return (f0 in Hz with NaN for unvoiced frames, voiced boolean mask)."""
+    f0, voiced, _ = librosa.pyin(y, fmin=65, fmax=600, sr=SAMPLE_RATE, frame_length=1024, hop_length=_HOP)
+    return f0, voiced
+
+
+def extract_features(y: np.ndarray) -> np.ndarray:
     """
-    RAVDESS filenames follow the pattern: 03-01-05-01-02-02-12.wav
-    The 3rd field (index 2) is the emotion code.
-    Returns the string label like 'angry', or 'unknown' if parsing fails.
+    Compute the handcrafted feature vector for preprocessed 16 kHz audio
+    (the output of load_audio / preprocess). Length == len(FEATURE_NAMES).
     """
-    try:
-        code = Path(filename).stem.split('-')[2]
-        return EMOTION_MAP.get(code, 'unknown')
-    except (IndexError, AttributeError):
-        return 'unknown'
-
-
-def extract_features(file_path: str, sr: int = 22050, duration: float = 3.0) -> np.ndarray:
-    """
-    Load an audio file and return a 1-D feature vector.
-
-    Parameters
-    ----------
-    file_path : str or Path
-        Path to the .wav file.
-    sr : int
-        Target sample rate (default 22050 Hz — standard for librosa).
-    duration : float
-        Max seconds to load. RAVDESS clips are ~3s; trimming keeps features consistent.
-
-    Returns
-    -------
-    np.ndarray of shape (193,)
-        Concatenation of: 40 MFCCs, 40 delta-MFCCs, 40 delta²-MFCCs,
-        12 chroma, 7 spectral contrast, 40 mel spectrogram means,
-        1 ZCR mean, 1 RMS mean, 1 RMS std  →  182 features (actual dim printed on first run)
-    """
-    y, sr = librosa.load(file_path, sr=sr, duration=duration)
-
-    # --- MFCC + deltas ---
-    # n_mfcc=40 gives finer spectral resolution than the original 13
-    mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40)
-    mfcc_mean = np.mean(mfcc, axis=1)           # shape (40,)
-
-    delta_mfcc = librosa.feature.delta(mfcc)
-    delta_mfcc_mean = np.mean(delta_mfcc, axis=1)  # shape (40,)
-
-    delta2_mfcc = librosa.feature.delta(mfcc, order=2)
-    delta2_mfcc_mean = np.mean(delta2_mfcc, axis=1)  # shape (40,)
-
-    # --- Chroma ---
-    stft = np.abs(librosa.stft(y))
-    chroma = librosa.feature.chroma_stft(S=stft, sr=sr)
-    chroma_mean = np.mean(chroma, axis=1)        # shape (12,)
-
-    # --- Spectral Contrast ---
-    contrast = librosa.feature.spectral_contrast(S=stft, sr=sr)
-    contrast_mean = np.mean(contrast, axis=1)    # shape (7,)
-
-    # --- Mel Spectrogram ---
-    mel = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=40)
-    mel_db = librosa.power_to_db(mel, ref=np.max)
-    mel_mean = np.mean(mel_db, axis=1)           # shape (40,)
-
-    # --- ZCR (zero-crossing rate) ---
-    zcr_mean = np.array([np.mean(librosa.feature.zero_crossing_rate(y))])  # shape (1,)
-
-    # --- RMS Energy ---
-    rms = librosa.feature.rms(y=y)[0]
-    rms_features = np.array([np.mean(rms), np.std(rms)])  # shape (2,)
-
-    return np.hstack([
-        mfcc_mean,
-        delta_mfcc_mean,
-        delta2_mfcc_mean,
-        chroma_mean,
-        contrast_mean,
-        mel_mean,
-        zcr_mean,
-        rms_features,
+    S = np.abs(librosa.stft(y, n_fft=_N_FFT, hop_length=_HOP))
+    power = S ** 2
+    logmel = librosa.power_to_db(librosa.feature.melspectrogram(S=power, sr=SAMPLE_RATE, n_mels=40))
+    mfcc = librosa.feature.mfcc(S=logmel, n_mfcc=40)
+    width = min(9, mfcc.shape[1] - (1 - mfcc.shape[1] % 2))  # delta needs an odd width <= n_frames
+    d1 = librosa.feature.delta(mfcc, width=max(width, 3), mode='nearest')
+    d2 = librosa.feature.delta(mfcc, order=2, width=max(width, 3), mode='nearest')
+    contrast = librosa.feature.spectral_contrast(S=S, sr=SAMPLE_RATE, n_bands=6, fmin=100)
+    chroma = librosa.feature.chroma_stft(S=power, sr=SAMPLE_RATE)
+    spectral = np.vstack([
+        librosa.feature.spectral_centroid(S=S, sr=SAMPLE_RATE),
+        librosa.feature.spectral_bandwidth(S=S, sr=SAMPLE_RATE),
+        librosa.feature.spectral_rolloff(S=S, sr=SAMPLE_RATE),
+        librosa.feature.spectral_flatness(S=S),
+        librosa.feature.zero_crossing_rate(y, frame_length=_N_FFT, hop_length=_HOP)[:, : S.shape[1]],
+        librosa.amplitude_to_db(librosa.feature.rms(S=S, frame_length=_N_FFT) + 1e-6),
     ])
+
+    f0, voiced = pitch_track(y)
+    lf0 = np.log(f0[voiced]) if np.any(voiced) else np.zeros(1)
+    pitch = np.array([
+        lf0.mean(),
+        lf0.std(),
+        np.percentile(lf0, 90) - np.percentile(lf0, 10),
+        float(np.mean(voiced)),
+        float(np.mean(np.abs(np.diff(lf0)))) if len(lf0) > 1 else 0.0,
+    ])
+
+    vec = np.concatenate([
+        _pool(mfcc), _pool(d1), _pool(d2), _pool(logmel), _pool(contrast), _pool(chroma), _pool(spectral),
+        pitch, [len(y) / SAMPLE_RATE],
+    ]).astype(np.float32)
+    return np.nan_to_num(vec, nan=0.0, posinf=0.0, neginf=0.0)
+
+
+def _feature_names() -> list[str]:
+    groups = [('mfcc', 40), ('d_mfcc', 40), ('d2_mfcc', 40), ('logmel', 40), ('contrast', 7), ('chroma', 12)]
+    names = []
+    for prefix, n in groups:
+        names += [f'{prefix}_{i}_mean' for i in range(n)] + [f'{prefix}_{i}_std' for i in range(n)]
+    spectral = ['centroid', 'bandwidth', 'rolloff', 'flatness', 'zcr', 'rms_db']
+    names += [f'{s}_mean' for s in spectral] + [f'{s}_std' for s in spectral]
+    names += ['logf0_mean', 'logf0_std', 'logf0_range', 'voiced_ratio', 'logf0_jitter', 'duration_s']
+    return names
+
+
+FEATURE_NAMES = _feature_names()
+
+
+def features_from_file(path: str | os.PathLike) -> np.ndarray:
+    """load_audio + extract_features in one call."""
+    return extract_features(load_audio(path))
+
+
+def describe_audio(y: np.ndarray) -> dict:
+    """Human-readable acoustic summary for the UI (not used by the model)."""
+    f0, voiced = pitch_track(y)
+    rms = librosa.feature.rms(y=y, frame_length=_N_FFT, hop_length=_HOP)[0]
+    return {
+        'duration_s': len(y) / SAMPLE_RATE,
+        'pitch_hz': float(np.nanmedian(f0[voiced])) if np.any(voiced) else float('nan'),
+        'pitch_variability_semitones': float(12 * np.std(np.log2(f0[voiced]))) if np.sum(voiced) > 1 else 0.0,
+        'voiced_ratio': float(np.mean(voiced)),
+        'loudness_variability_db': float(np.std(librosa.amplitude_to_db(rms + 1e-6))),
+        'spectral_centroid_hz': float(np.mean(librosa.feature.spectral_centroid(y=y, sr=SAMPLE_RATE))),
+        'f0': f0,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Dataset loading with caching
+# ─────────────────────────────────────────────────────────────────────────────
+
+def list_ravdess_files(dataset_path: str | os.PathLike) -> list[Path]:
+    """All parseable RAVDESS .wav files under dataset_path, sorted for reproducibility."""
+    return sorted(p for p in Path(dataset_path).rglob('*.wav') if parse_ravdess_filename(p.name))
 
 
 def load_dataset(
-    dataset_path: str,
-    cache_dir: str = 'data',
+    dataset_path: str | os.PathLike,
+    cache_dir: str | os.PathLike = 'data',
     force_reload: bool = False,
-) -> tuple[np.ndarray, np.ndarray]:
+    n_jobs: int = -1,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Walk dataset_path recursively, extract features from every .wav file,
-    and return (X, y) numpy arrays.
-
-    Caching: After the first run, features are saved to .npy files in cache_dir.
-    Subsequent runs load from cache — this saves ~5–10 minutes per run.
-
-    Parameters
-    ----------
-    dataset_path : str
-        Root folder of the RAVDESS dataset (contains Actor_01, Actor_02, ...)
-    cache_dir : str
-        Where to save/load cached .npy files.
-    force_reload : bool
-        If True, ignore cache and re-extract.
-
-    Returns
-    -------
-    X : np.ndarray, shape (n_samples, n_features)
-    y : np.ndarray, shape (n_samples,)  — integer labels
+    Extract handcrafted features for every RAVDESS file (in parallel) and
+    return (X, y, actors). Results are cached in cache_dir, keyed by
+    FEATURE_VERSION so a stale cache from an older feature set is never reused.
     """
-    cache_X = Path(cache_dir) / 'features_X.npy'
-    cache_y = Path(cache_dir) / 'features_y.npy'
+    from joblib import Parallel, delayed
 
-    if not force_reload and cache_X.exists() and cache_y.exists():
-        print(f"[features] Loading cached features from {cache_dir}/")
-        return np.load(cache_X), np.load(cache_y)
+    cache = Path(cache_dir) / f'features_{FEATURE_VERSION}.npz'
+    if cache.exists() and not force_reload:
+        print(f"[features] Loading cached features from {cache}")
+        d = np.load(cache)
+        return d['X'], d['y'], d['actors']
 
-    print(f"[features] Extracting features from {dataset_path} ...")
-    X, y = [], []
-    errors = 0
+    files = list_ravdess_files(dataset_path)
+    if not files:
+        raise FileNotFoundError(f"No RAVDESS .wav files found under {dataset_path}")
+    print(f"[features] Extracting features from {len(files)} files in {dataset_path} ...")
 
-    for root, _, files in os.walk(dataset_path):
-        for fname in sorted(files):
-            if not fname.endswith('.wav'):
-                continue
-            emotion = get_emotion_from_filename(fname)
-            if emotion == 'unknown':
-                continue
-            try:
-                feat = extract_features(os.path.join(root, fname))
-                X.append(feat)
-                y.append(EMOTION_TO_INT[emotion])
-            except Exception as e:
-                print(f"  [warn] Skipping {fname}: {e}")
-                errors += 1
+    X = np.stack(Parallel(n_jobs=n_jobs)(delayed(features_from_file)(p) for p in files))
+    metas = [parse_ravdess_filename(p.name) for p in files]
+    y = np.array([EMOTION_TO_INT[m['emotion']] for m in metas], dtype=np.int64)
+    actors = np.array([m['actor'] for m in metas], dtype=np.int64)
 
-    X = np.array(X, dtype=np.float32)
-    y = np.array(y, dtype=np.int32)
-
-    Path(cache_dir).mkdir(parents=True, exist_ok=True)
-    np.save(cache_X, X)
-    np.save(cache_y, y)
-    print(f"[features] Done. {len(X)} samples, {X.shape[1]} features each. {errors} errors.")
-    print(f"[features] Cached to {cache_dir}/")
-    return X, y
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(cache, X=X, y=y, actors=actors)
+    print(f"[features] Done: {X.shape[0]} samples x {X.shape[1]} features. Cached to {cache}")
+    return X, y, actors

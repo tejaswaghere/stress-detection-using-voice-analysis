@@ -1,0 +1,28 @@
+{
+  "backbone": "microsoft/wavlm-base-plus",
+  "evaluation": "5-fold GroupKFold by actor, StandardScaler + LogisticRegression(C=0.01), mean-pooled single layer",
+  "accuracy_by_layer": {
+    "0": 0.552,
+    "1": 0.67,
+    "2": 0.698,
+    "3": 0.729,
+    "4": 0.765,
+    "5": 0.78,
+    "6": 0.787,
+    "7": 0.758,
+    "8": 0.72,
+    "9": 0.713,
+    "10": 0.701,
+    "11": 0.697,
+    "12": 0.687
+  },
+  "combinations_6fold": {
+    "layer6_mean": 0.783,
+    "layer6_mean+std": 0.781,
+    "avg_layers4-7_mean": 0.791,
+    "avg_layers3-8_mean": 0.79,
+    "concat_layers4-7_mean": 0.799,
+    "layer6_mean_rbf_svm": 0.753
+  },
+  "note": "Layer choice was made on these same CV folds, so the selected configuration's score carries a small optimistic bias (differences between the top options are within one fold-std)."
+}

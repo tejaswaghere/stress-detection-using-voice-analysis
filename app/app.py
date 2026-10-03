@@ -1,239 +1,258 @@
 """
-Stress & Emotion Detection from Voice
-Gradio app — deployable to HuggingFace Spaces
+Speech Emotion & Stress Detector — Gradio app (local or Hugging Face Spaces).
 
-Usage (local):
     python app/app.py
 
-Usage (HF Spaces):
-    Push to a Space with requirements.txt — Spaces auto-launches app.py
+All inference goes through src/predict.py, the same code path used to evaluate
+the model, so there is no train/serve feature skew.
 """
 
-import gradio as gr
-import numpy as np
-import librosa
-import pickle
+from __future__ import annotations
+
 import os
 import sys
-import warnings
-warnings.filterwarnings("ignore")
+from pathlib import Path
 
-# ── Resolve model path whether run from repo root or app/ ──────────────────
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODEL_PATH = os.path.join(ROOT, "models", "svm_model.pkl")
+import gradio as gr
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
 
-EMOTIONS = ["neutral", "calm", "happy", "sad", "angry", "fearful", "disgust", "surprised"]
-EMOJI    = ["😐", "😌", "😊", "😢", "😠", "😨", "🤢", "😲"]
-HIGH_STRESS = {"angry", "fearful", "disgust", "surprised"}
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent if (HERE.parent / 'src').exists() else HERE  # repo layout or flat Space layout
+sys.path.insert(0, str(ROOT / 'src'))
 
-# ── Load model (graceful fallback for demo without trained model) ──────────
-model = None
-if os.path.exists(MODEL_PATH):
-    try:
-        with open(MODEL_PATH, "rb") as f:
-            model = pickle.load(f)
-        print(f"✓ Model loaded from {MODEL_PATH}")
-    except Exception as e:
-        print(f"⚠ Could not load model: {e}")
-else:
-    print(f"⚠ No model found at {MODEL_PATH} — using rule-based fallback")
-    print("  Run: python src/train.py --dataset data/RAVDESS --model svm")
+from features import EMOTIONS, SAMPLE_RATE, describe_audio  # noqa: E402
+from predict import Predictor  # noqa: E402
+from stress import STRESS_WEIGHTS  # noqa: E402
 
+MODEL_PATH = Path(os.environ.get('MODEL_PATH', ROOT / 'models' / 'emotion_model.joblib'))
+EXAMPLES_DIR = ROOT / 'app' / 'examples' if (ROOT / 'app' / 'examples').exists() else ROOT / 'examples'
+REPO_URL = 'https://github.com/tejaswaghere/stress-detection-using-voice-analysis'
 
-# ── Feature extraction (mirrors src/features.py) ──────────────────────────
-def extract_features(audio_path: str) -> np.ndarray:
-    """Extract 182-dim feature vector (MFCC + delta + chroma + contrast + mel + ZCR + RMS)."""
-    y, sr = librosa.load(audio_path, sr=22050, mono=True, duration=5.0)
+EMOJI = dict(zip(EMOTIONS, ['😐', '😌', '😊', '😢', '😠', '😨', '🤢', '😲']))
+COLORS = dict(zip(EMOTIONS, ['#94a3b8', '#38bdf8', '#facc15', '#6366f1', '#ef4444', '#a855f7', '#22c55e', '#fb923c']))
+LEVEL_COLORS = {'low': '#16a34a', 'moderate': '#d97706', 'high': '#dc2626'}
 
-    if len(y) < sr * 0.5:
-        raise ValueError("Audio too short (< 0.5 s) — please record at least 2 seconds")
-
-    feats = []
-
-    # MFCCs (40) + delta (40) + delta² (40)
-    mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40)
-    feats.append(np.mean(mfcc, axis=1))
-    feats.append(np.mean(librosa.feature.delta(mfcc), axis=1))
-    feats.append(np.mean(librosa.feature.delta(mfcc, order=2), axis=1))
-
-    # Chroma (12)
-    chroma = librosa.feature.chroma_stft(y=y, sr=sr)
-    feats.append(np.mean(chroma, axis=1))
-
-    # Spectral contrast (7)
-    contrast = librosa.feature.spectral_contrast(y=y, sr=sr)
-    feats.append(np.mean(contrast, axis=1))
-
-    # Mel spectrogram (40)
-    mel = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=40)
-    feats.append(np.mean(mel, axis=1))
-
-    # ZCR (1)
-    feats.append([np.mean(librosa.feature.zero_crossing_rate(y))])
-
-    # RMS mean + std (2)
-    rms = librosa.feature.rms(y=y)[0]
-    feats.append([np.mean(rms), np.std(rms)])
-
-    vector = np.concatenate(feats)           # shape: (182,)
-    assert vector.shape[0] == 182, f"Expected 182 features, got {vector.shape[0]}"
-    return vector, y, sr
+predictor = Predictor(MODEL_PATH)
+M = predictor.bundle['metrics']
 
 
-# ── Rule-based fallback (no trained model) ────────────────────────────────
-def _rule_based(y, sr) -> np.ndarray:
-    """Approximate RAVDESS SVM decision boundaries without a model file."""
-    rms  = float(np.mean(librosa.feature.rms(y=y)))
-    zcr  = float(np.mean(librosa.feature.zero_crossing_rate(y)))
-    try:
-        f0, _, _ = librosa.pyin(y, fmin=librosa.note_to_hz('C2'),
-                                   fmax=librosa.note_to_hz('C7'))
-        pitch = float(np.nanmean(f0[f0 > 0])) if np.any(f0 > 0) else 120.0
-    except Exception:
-        pitch = 120.0
+# ─────────────────────────────────────────────────────────────────────────────
+# Rendering helpers
+# ─────────────────────────────────────────────────────────────────────────────
 
-    sc = float(np.mean(librosa.feature.spectral_centroid(y=y, sr=sr)))
-
-    raw = np.array([
-        max(0, rms * 1.1 + zcr * 0.9 + (0.4 if pitch > 170 else 0) + (0.3 if sc > 3500 else 0) - 0.5),  # angry
-        max(0, zcr + (0.5 if pitch > 190 else 0) + (0.4 if sc > 3800 else 0) + rms * 0.4 - 0.5),          # fearful
-        max(0, rms * 0.6 + (0.5 if 150 < pitch < 200 else 0) + (0.3 if sc > 2800 else 0) - 0.2),          # happy
-        max(0, (1 - rms) * 0.7 + (0.5 if pitch < 110 else 0) + (0.3 if sc < 1800 else 0) - 0.1),          # sad
-        max(0, (1 - zcr) * 0.8 + (0.4 if 100 < pitch < 140 else 0) + (1 - rms) * 0.4 - 0.2),             # calm
-        max(0, 0.6 - abs(rms - 0.4) - abs(zcr - 0.1)),                                                     # neutral
-        max(0, zcr * 0.6 + (0.3 if pitch > 160 else 0) + rms * 0.5 - 0.4),                                 # disgust
-        max(0, (0.4 if sc > 3000 else 0) + (0.4 if pitch > 180 else 0) + rms * 0.3 - 0.2),                # surprised
-    ])
-
-    # Map to EMOTIONS order: neutral,calm,happy,sad,angry,fearful,disgust,surprised
-    reorder = [5, 4, 2, 3, 0, 1, 6, 7]
-    probs = raw[reorder]
-    probs = probs + 0.05
-    probs = probs / probs.sum()
-    return probs
+def result_card(pred) -> str:
+    e = pred.emotion
+    conf = pred.probs[e]
+    color = LEVEL_COLORS[pred.stress_level]
+    runner_up = sorted(pred.probs, key=pred.probs.get)[-2]
+    hedge = '' if conf >= 0.5 else (f'<div class="hedge">Low confidence — could also be '
+                                    f'<b>{runner_up}</b> ({pred.probs[runner_up]:.0%})</div>')
+    return f"""
+    <div class="card">
+      <div class="emo">
+        <div class="emo-icon">{EMOJI[e]}</div>
+        <div><div class="emo-label">{e.capitalize()}</div>
+             <div class="emo-conf">{conf:.0%} confidence</div></div>
+      </div>
+      {hedge}
+      <div class="gauge-head"><span>Vocal stress index</span>
+        <span style="color:{color};font-weight:700">{pred.stress:.0f}/100 · {pred.stress_level}</span></div>
+      <div class="gauge"><div class="gauge-fill" style="width:{pred.stress:.0f}%;background:{color}"></div></div>
+      <div class="gauge-desc">{pred.stress_description}</div>
+    </div>"""
 
 
-# ── Main prediction function ───────────────────────────────────────────────
-def predict_emotion(audio_path):
-    if audio_path is None:
-        return "Please upload or record audio first.", {}, "", ""
+def analysis_plot(pred, info):
+    y = pred.audio
+    has_tl = pred.timeline is not None
+    fig, axes = plt.subplots(3 if has_tl else 2, 1, figsize=(9, 6.8 if has_tl else 4.6), sharex=True,
+                             gridspec_kw={'height_ratios': [1, 1.1, 1.3] if has_tl else [1, 1.1]})
+    t = np.arange(len(y)) / SAMPLE_RATE
+    axes[0].plot(t, y, lw=0.4, color='#7c3aed')
+    axes[0].set_ylabel('waveform')
+    axes[0].set_yticks([])
 
-    try:
-        vector, y, sr = extract_features(audio_path)
-    except ValueError as e:
-        return str(e), {}, "", ""
-    except Exception as e:
-        return f"Feature extraction failed: {e}", {}, "", ""
+    f0 = info['f0']
+    tf = np.arange(len(f0)) * 160 / SAMPLE_RATE
+    axes[1].plot(tf, f0, '.', ms=2.5, color='#db2777')
+    axes[1].set_ylabel('pitch (Hz)')
+    if np.any(np.isfinite(f0)):
+        lo, hi = np.nanpercentile(f0, [2, 98])
+        axes[1].set_ylim(max(50, lo * 0.8), hi * 1.2)
 
-    # Inference
-    if model is not None:
-        try:
-            if hasattr(model, "predict_proba"):
-                probs = model.predict_proba([vector])[0]
-            else:
-                pred  = model.predict([vector])[0]
-                probs = np.eye(len(EMOTIONS))[pred]
-        except Exception as e:
-            probs = _rule_based(y, sr)
-    else:
-        probs = _rule_based(y, sr)
+    if has_tl:
+        centres, probs = pred.timeline
+        # Each window describes its centre; hold the first/last values out to the clip edges
+        centres = np.concatenate([[0], centres, [t[-1]]])
+        probs = [probs[0], *probs, probs[-1]]
+        stack = np.array([[p[e] for e in EMOTIONS] for p in probs]).T
+        axes[2].stackplot(centres, stack, colors=[COLORS[e] for e in EMOTIONS], labels=EMOTIONS, alpha=0.9)
+        stress = [100 * sum(STRESS_WEIGHTS[e] * p[e] for e in EMOTIONS) for p in probs]
+        ax2 = axes[2].twinx()
+        ax2.plot(centres, stress, 'k-', lw=2, label='stress index')
+        ax2.set_ylim(0, 100)
+        ax2.set_ylabel('stress')
+        axes[2].set_ylim(0, 1)
+        axes[2].set_ylabel('emotion mix')
+        axes[2].legend(loc='upper left', bbox_to_anchor=(1.08, 1), fontsize=8, frameon=False)
+    axes[-1].set_xlabel('time (s, silence trimmed)')
+    for ax in axes:
+        ax.spines[['top', 'right']].set_visible(False)
+    fig.tight_layout()
+    return fig
 
-    # Build outputs
-    top_idx     = int(np.argmax(probs))
-    top_emotion = EMOTIONS[top_idx]
-    confidence  = float(probs[top_idx]) * 100
 
-    result_label = f"{EMOJI[top_idx]}  {top_emotion.capitalize()}  ({confidence:.1f}% confidence)"
-
-    conf_dict = {f"{EMOJI[i]} {EMOTIONS[i]}": float(p) for i, p in enumerate(probs)}
-
-    # Stress level
-    stress_emotions = {e: float(probs[EMOTIONS.index(e)]) for e in HIGH_STRESS}
-    stress_score    = sum(stress_emotions.values())
-    if stress_score > 0.55:
-        stress_out = "🔴  High stress indicators detected"
-    elif stress_score > 0.30:
-        stress_out = "🟡  Moderate stress indicators present"
-    else:
-        stress_out = "🟢  Low stress — voice appears calm"
-
-    # Feature summary
-    rms   = float(np.mean(librosa.feature.rms(y=y)))
-    zcr   = float(np.mean(librosa.feature.zero_crossing_rate(y)))
-    sc    = float(np.mean(librosa.feature.spectral_centroid(y=y, sr=sr)))
-    feat_summary = (
-        f"**RMS Energy:** {rms:.4f}  |  "
-        f"**ZCR:** {zcr:.5f}  |  "
-        f"**Spectral Centroid:** {sc:.0f} Hz  |  "
-        f"**Feature vector:** 182 dims"
+def acoustics_md(i: dict) -> str:
+    pitch = f"{i['pitch_hz']:.0f} Hz" if np.isfinite(i['pitch_hz']) else 'n/a'
+    return (
+        "| Measure | Value | Why it matters |\n|---|---|---|\n"
+        f"| Speech duration | {i['duration_s']:.1f} s | after trimming silence |\n"
+        f"| Median pitch | {pitch} | raised pitch accompanies arousal (anger, fear, excitement) |\n"
+        f"| Pitch variability | {i['pitch_variability_semitones']:.1f} semitones | flat = calm/sad, wide = expressive |\n"
+        f"| Loudness variability | {i['loudness_variability_db']:.1f} dB | bursts of energy mark anger and surprise |\n"
+        f"| Voiced ratio | {i['voiced_ratio']:.0%} | share of frames with vocal-fold vibration |\n"
+        f"| Spectral centroid | {i['spectral_centroid_hz']:.0f} Hz | 'brightness' — tense voices sound brighter |\n"
     )
 
-    return result_label, conf_dict, stress_out, feat_summary
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Prediction
+# ─────────────────────────────────────────────────────────────────────────────
+
+def analyze(audio_path):
+    if not audio_path:
+        raise gr.Error('Record or upload some audio first.')
+    try:
+        pred = predictor.predict_file(audio_path)
+    except ValueError as e:  # silent / too short
+        raise gr.Error(str(e))
+    api = {
+        'emotion': pred.emotion,
+        'confidence': round(pred.probs[pred.emotion], 4),
+        'probabilities': {k: round(v, 4) for k, v in pred.probs.items()},
+        'stress_index': round(pred.stress, 1),
+        'stress_level': pred.stress_level,
+    }
+    labels = {f'{EMOJI[k]} {k}': v for k, v in pred.probs.items()}
+    info = describe_audio(pred.audio)
+    return result_card(pred), labels, analysis_plot(pred, info), acoustics_md(info), api
 
 
-# ── Gradio UI ──────────────────────────────────────────────────────────────
-def build_ui():
-    with gr.Blocks(
-        title="Speech Emotion & Stress Detector",
-        theme=gr.themes.Soft(primary_hue="violet"),
-        css="""
-        #title { text-align: center; }
-        #title h1 { font-size: 2rem; }
-        .stress-box { font-size: 1.1rem; padding: 0.75rem; border-radius: 8px; }
-        """
-    ) as demo:
+# ─────────────────────────────────────────────────────────────────────────────
+# UI
+# ─────────────────────────────────────────────────────────────────────────────
 
-        gr.HTML("""
-        <div id="title">
-          <h1>🎙️ Speech Emotion &amp; Stress Detector</h1>
-          <p style="color:#666">Trained on <b>RAVDESS</b> · 182 audio features (MFCC + Chroma + Spectral Contrast + Mel)
-          · <a href="https://github.com/tejaswaghere/stress-detection-using-voice-analysis" target="_blank">GitHub ↗</a></p>
-        </div>
-        """)
+CSS = """
+.card{border:1px solid var(--border-color-primary);border-radius:14px;padding:18px 20px;background:var(--background-fill-secondary)}
+.emo{display:flex;align-items:center;gap:14px;margin-bottom:12px}
+.emo-icon{font-size:48px;line-height:1}
+.emo-label{font-size:26px;font-weight:700}
+.emo-conf{color:var(--body-text-color-subdued)}
+.hedge{font-size:13px;color:var(--body-text-color-subdued);margin:-4px 0 12px}
+.gauge-head{display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px}
+.gauge{height:12px;border-radius:99px;background:var(--border-color-primary);overflow:hidden}
+.gauge-fill{height:100%;border-radius:99px;transition:width .6s}
+.gauge-desc{font-size:13px;color:var(--body-text-color-subdued);margin-top:6px}
+.stats{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:6px}
+.stat{border:1px solid var(--border-color-primary);border-radius:99px;padding:3px 12px;font-size:13px}
+footer{display:none !important}
+"""
 
+
+def header_html() -> str:
+    feats = 'WavLM embeddings' if predictor.bundle['feature_type'] == 'embedding' else 'handcrafted acoustic features'
+    return f"""
+    <div style="text-align:center">
+      <h1 style="margin-bottom:4px">🎙️ Speech Emotion &amp; Stress Detector</h1>
+      <p style="margin:0;color:var(--body-text-color-subdued)">Say a sentence the way you feel it. The model listens to
+      <i>how</i> you speak (pitch, energy, voice quality), not the words.</p>
+      <div class="stats">
+        <span class="stat">🎯 {M['accuracy']:.0%} accuracy on unseen speakers (8 classes, chance 12.5%)</span>
+        <span class="stat">🧠 {feats} + {M['model']}</span>
+        <span class="stat">📚 RAVDESS · 24 actors · 1440 clips</span>
+        <span class="stat"><a href="{REPO_URL}" target="_blank">GitHub ↗</a></span>
+      </div>
+    </div>"""
+
+
+ABOUT_MD = f"""
+### How it works
+1. **Preprocess** — resample to 16 kHz, trim silence, normalise volume (so mic gain doesn't look like anger).
+2. **Embed** — a frozen, pretrained speech model turns the audio into a vector that captures prosody and voice quality.
+3. **Classify** — a small linear classifier trained on RAVDESS outputs probabilities for 8 emotions.
+4. **Stress index** — the probabilities are combined using arousal/valence weights
+   ({', '.join(f'{k} {v:g}' for k, v in STRESS_WEIGHTS.items() if v)}).
+
+### Honest limitations
+- **Evaluated speaker-independently:** {M['accuracy']:.1%} accuracy / {M['macro_f1']:.2f} macro-F1 on actors never seen in training.
+  The same model scores {M['accuracy_random_split_leaky']:.1%} on a random clip split, which leaks speakers — that's
+  why the README reports the lower number.
+- **Acted speech:** RAVDESS actors exaggerate emotions in two fixed sentences of North-American English. Natural,
+  subtle speech, other languages, background noise and phone mics are all harder.
+- **"Stress" is derived, not measured** — RAVDESS has no stress labels. Treat the index as an indicator of tense,
+  negative-arousal vocal delivery, not a diagnosis. **Not a medical or HR tool.**
+- Audio is processed in memory to make the prediction and is not stored by this app.
+"""
+
+
+def build_ui() -> gr.Blocks:
+    examples = sorted(EXAMPLES_DIR.glob('*.wav')) if EXAMPLES_DIR.exists() else []
+    with gr.Blocks(title='Speech Emotion & Stress Detector') as demo:
+        # Outputs are created up front (render=False) so the examples below can target them
+        card = gr.HTML('<div class="card" style="color:var(--body-text-color-subdued)">'
+                       'Results will appear here.</div>', render=False)
+        probs = gr.Label(label='Emotion probabilities', num_top_classes=8, show_heading=False, render=False)
+        plot = gr.Plot(label='Waveform · pitch contour · emotion over time (clips > 4 s)', render=False)
+        acoustics = gr.Markdown(render=False)
+        api_json = gr.JSON(render=False)
+        outputs = [card, probs, plot, acoustics, api_json]
+
+        gr.HTML(header_html())
+        with gr.Row(equal_height=False):
+            with gr.Column(scale=5):
+                audio_in = gr.Audio(sources=['microphone', 'upload'], type='filepath',
+                                    label='Record (2–10 s works best) or upload audio')
+                btn = gr.Button('Analyze', variant='primary', size='lg')
+                # Registered before gr.Examples so this public endpoint gets the name /analyze
+                btn.click(analyze, audio_in, outputs, api_name='analyze')
+                if examples:
+                    gr.Examples(
+                        examples=[[str(p)] for p in examples],
+                        inputs=audio_in,
+                        outputs=outputs,
+                        fn=analyze,
+                        run_on_click=True,
+                        cache_examples=False,
+                        api_name='run_example', api_visibility='private',
+                        label='Try a RAVDESS clip (from actors held out of training)',
+                        example_labels=[p.stem.replace('_', ' ') for p in examples],
+                    )
+                gr.Markdown('💡 *Try saying "I can\'t believe this is happening" angrily, then calmly.*')
+            with gr.Column(scale=6):
+                card.render()
+                probs.render()
         with gr.Row():
-            with gr.Column(scale=1):
-                audio_in = gr.Audio(
-                    label="Upload or Record Audio",
-                    sources=["microphone", "upload"],
-                    type="filepath",
-                )
-                analyse_btn = gr.Button("🔍 Analyse Emotion", variant="primary", size="lg")
+            with gr.Column(scale=7):
+                plot.render()
+            with gr.Column(scale=4):
+                acoustics.render()
+        with gr.Accordion('API response (JSON)', open=False):
+            api_json.render()
+        with gr.Accordion('How it works & limitations', open=False):
+            gr.Markdown(ABOUT_MD)
 
-                gr.Examples(
-                    examples=[],          # Add .wav file paths here after training
-                    inputs=audio_in,
-                    label="Sample audio files"
-                )
-
-            with gr.Column(scale=1):
-                result_out = gr.Label(label="Detected Emotion")
-                conf_out   = gr.Label(label="Confidence per Emotion", num_top_classes=8)
-                stress_out = gr.Textbox(label="Stress Indicator", elem_classes=["stress-box"])
-                feat_out   = gr.Markdown(label="Extracted Features")
-
-        analyse_btn.click(
-            fn=predict_emotion,
-            inputs=[audio_in],
-            outputs=[result_out, conf_out, stress_out, feat_out],
-        )
-
-        gr.HTML("""
-        <hr style="margin:2rem 0;opacity:0.2"/>
-        <div style="text-align:center;color:#888;font-size:0.85rem">
-          Model: SVM · Dataset: RAVDESS (1440 samples, 24 actors) · Accuracy: ~65–70% (8-class)
-          <br/>For research use only — not a clinical tool
-        </div>
-        """)
-
+        audio_in.stop_recording(analyze, audio_in, outputs, api_name='on_record', api_visibility='private')
+        audio_in.upload(analyze, audio_in, outputs, api_name='on_upload', api_visibility='private')
     return demo
 
 
-if __name__ == "__main__":
-    demo = build_ui()
-    demo.launch(
-        server_name="0.0.0.0",   # Needed for HF Spaces
-        server_port=7860,
-        share=False,
-        show_error=True,
+demo = build_ui()
+
+if __name__ == '__main__':
+    demo.queue(default_concurrency_limit=2).launch(
+        server_name='0.0.0.0', server_port=int(os.environ.get('PORT', 7860)),
+        theme=gr.themes.Soft(primary_hue='violet'), css=CSS,
     )

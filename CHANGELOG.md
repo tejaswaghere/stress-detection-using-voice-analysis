@@ -2,7 +2,37 @@
 
 All notable changes to this project are documented here.
 
-## [v2.0.0] — 2025-XX-XX
+## [v3.0.0] — 2026-10-03
+
+### Fixed
+- **The live demo now runs a real model.** The Hugging Face Space shipped without a model file and silently
+  fell back to hand-written rules. The Space is now generated from the repo (`scripts/build_space.py`) with
+  the trained model included.
+- **Train/serve skew.** `app/app.py` re-implemented feature extraction differently from `src/features.py`
+  (raw vs dB mel, 5 s vs 3 s, different chroma input). All code paths now share `src/features.py` / `src/predict.py`.
+- **Inflated accuracy.** v2's ~68% came from a random clip split that leaks actors between train and test.
+  Speaker-independent evaluation of v2 gives 40.9%. All reported numbers are now actor-grouped.
+- README images pointed to plots that were never committed.
+- Audio is now silence-trimmed and peak-normalised, so microphone gain no longer drives predictions.
+
+### Added
+- WavLM-base-plus embeddings + logistic regression: **79.0% unseen-speaker accuracy** (was 40.9%).
+- Improved handcrafted feature set (376 features: mean+std pooling, pitch, spectral shape): 56.2%, no torch needed.
+- Speaker-independent `train.py` (6-fold GroupKFold) writing `metrics.json`, confusion matrix, ROC, and per-actor accuracy.
+- Layer probe for every WavLM layer (`results/layer_probe.json`).
+- Redesigned Gradio app: stress gauge, pitch contour, emotion-over-time timeline, acoustic summary, JSON API (`/analyze`),
+  and example clips from actors held out of the final model.
+- GitHub Pages demo now calls the real model through the Space API (it used a 4-feature heuristic before).
+- Stress index grounded in the arousal/valence circumplex model (`src/stress.py`).
+- `src/predict.py` CLI, versioned model bundles that refuse stale feature versions.
+- Test suite (`tests/`) and GitHub Actions CI.
+- MIT `LICENSE` file (the README referenced one that didn't exist).
+
+### Removed
+- Unused, untrained CNN definition in `model.py`.
+- Rule-based "fallback" predictions.
+
+## [v2.0.0] — 2026-04
 
 ### Added
 - Live microphone recording in browser demo (Web Audio API / getUserMedia)
@@ -25,7 +55,7 @@ All notable changes to this project are documented here.
 
 ---
 
-## [v1.0.0] — 2025-XX-XX  ← Initial release
+## [v1.0.0] — 2026-04 (initial release)
 
 ### Added
 - Feature extraction pipeline: 182-dim vector (MFCC 40 + delta 40 + delta² 40 + chroma 12 + spectral contrast 7 + mel 40 + ZCR 1 + RMS 2)
@@ -36,4 +66,4 @@ All notable changes to this project are documented here.
 - Static browser demo with file upload (`demo/index.html`)
 - Jupyter walkthrough notebook (`notebooks/emotion_detection.ipynb`)
 - Training on RAVDESS dataset (1440 samples, 8 emotion classes, 24 actors)
-- 65–70% test accuracy (SVM, 8-class classification)
+- 65–70% test accuracy reported (SVM, 8-class). Note: measured on a random clip split; see v3.0.0

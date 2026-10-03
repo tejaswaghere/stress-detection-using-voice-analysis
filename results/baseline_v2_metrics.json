@@ -1,0 +1,7 @@
+{
+  "description": "Original v2 pipeline (182 mean-pooled features, 3 s @ 22.05 kHz, no trimming, SVC C=10) re-evaluated with the same protocol",
+  "evaluation": "6-fold GroupKFold by actor (speaker-independent)",
+  "accuracy": 0.409,
+  "macro_f1": 0.4002,
+  "accuracy_random_split_leaky": 0.6243
+}

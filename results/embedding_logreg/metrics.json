@@ -1,0 +1,43 @@
+{
+  "features": "embedding",
+  "model": "logreg",
+  "backbone": "microsoft/wavlm-base-plus",
+  "layers": [
+    4,
+    5,
+    6,
+    7
+  ],
+  "n_clips": 1440,
+  "n_features": 768,
+  "evaluation": "6-fold GroupKFold by actor (speaker-independent)",
+  "accuracy": 0.7903,
+  "accuracy_fold_std": 0.0472,
+  "balanced_accuracy": 0.7936,
+  "macro_f1": 0.7875,
+  "accuracy_random_split_leaky": 0.8875,
+  "per_class_f1": {
+    "neutral": 0.7535,
+    "calm": 0.8316,
+    "happy": 0.7642,
+    "sad": 0.6361,
+    "angry": 0.8526,
+    "fearful": 0.7763,
+    "disgust": 0.8505,
+    "surprised": 0.8351
+  },
+  "final_fit_excludes_actors": [
+    23,
+    24
+  ],
+  "stress_weights": {
+    "angry": 1.0,
+    "fearful": 1.0,
+    "disgust": 0.7,
+    "sad": 0.45,
+    "surprised": 0.35,
+    "happy": 0.1,
+    "neutral": 0.0,
+    "calm": 0.0
+  }
+}

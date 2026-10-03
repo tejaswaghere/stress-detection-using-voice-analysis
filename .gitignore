@@ -1,0 +1,16 @@
+# Dataset and caches (download RAVDESS yourself — see README)
+data/
+*.npz
+__pycache__/
+.pytest_cache/
+.venv/
+
+# Generated Space bundle (python scripts/build_space.py)
+space/
+
+# Extra models; models/emotion_model.joblib is committed
+models/*
+!models/emotion_model.joblib
+
+.gradio/
+.ipynb_checkpoints/
