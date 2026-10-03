@@ -28,7 +28,7 @@ sdk_version: {gradio_version}
 app_file: app.py
 pinned: false
 license: mit
-short_description: Emotion & vocal stress from speech (WavLM, 79% unseen-speaker)
+short_description: Emotion & vocal stress from speech (WavLM, {acc:.0%} unseen-speaker)
 models:
   - microsoft/wavlm-base-plus
 tags:
@@ -40,16 +40,18 @@ tags:
 # 🎙️ Speech Emotion & Stress Detector
 
 Record or upload a short clip. A frozen **WavLM** speech model and a linear classifier
-trained on **RAVDESS** predict one of 8 emotions, plus a 0–100 vocal stress index.
+trained on **{data}** ({n_speakers} actors) predict one of {n_classes} emotions ({classes}),
+plus a 0–100 vocal stress index.
 
-- **79% accuracy on speakers never seen in training** (8 classes, 6-fold actor-grouped CV; chance = 12.5%)
+- **{acc:.0%} accuracy on speakers never seen in training** ({n_classes} classes, 6-fold speaker-grouped CV; chance = {chance:.0%})
 - Emotion timeline for recordings longer than 4 s
 - API: `POST /analyze` (see "Use via API" at the bottom of the app)
 
 Source, training code and evaluation: https://github.com/tejaswaghere/stress-detection-using-voice-analysis
 
 Example clips are from RAVDESS actors 23 and 24, who were excluded from the final model's training.
-RAVDESS — Livingstone & Russo (2018), CC BY-NC-SA 4.0. Not a medical or HR tool.
+RAVDESS — Livingstone & Russo (2018), CC BY-NC-SA 4.0. CREMA-D — Cao et al. (2014), ODbL.
+Not a medical or HR tool.
 """
 
 SPACE_REQUIREMENTS = """--extra-index-url https://download.pytorch.org/whl/cpu
@@ -77,7 +79,14 @@ def build(out: Path) -> Path:
     shutil.copytree(ROOT / 'app' / 'examples', out / 'examples')
     (out / 'models').mkdir()
     shutil.copy(ROOT / 'models' / 'emotion_model.joblib', out / 'models' / 'emotion_model.joblib')
-    (out / 'README.md').write_text(SPACE_README.format(gradio_version=gradio.__version__), encoding='utf-8')
+    m = bundle['metrics']
+    corpora = m.get('corpora', ['ravdess'])
+    names = {'ravdess': ('RAVDESS', 24), 'cremad': ('CREMA-D', 91)}
+    (out / 'README.md').write_text(SPACE_README.format(
+        gradio_version=gradio.__version__, acc=m['accuracy'], n_classes=len(bundle['classes']),
+        classes=', '.join(bundle['classes']), chance=1 / len(bundle['classes']),
+        data=' + '.join(names[c][0] for c in corpora), n_speakers=sum(names[c][1] for c in corpora),
+    ), encoding='utf-8')
     # Pin scikit-learn to the version that pickled the model
     (out / 'requirements.txt').write_text(SPACE_REQUIREMENTS.format(sklearn_version=bundle['sklearn_version']))
     (out / '.gitattributes').write_text('*.joblib filter=lfs diff=lfs merge=lfs -text\n*.wav filter=lfs diff=lfs merge=lfs -text\n')

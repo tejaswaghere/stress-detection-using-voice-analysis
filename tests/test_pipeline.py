@@ -104,5 +104,28 @@ def test_stale_feature_version_is_rejected(tmp_path):
 @pytest.mark.skipif(not (ROOT / 'models' / 'emotion_model.joblib').exists(), reason='no trained model')
 def test_shipped_model_loads():
     bundle = load_bundle(ROOT / 'models' / 'emotion_model.joblib')
-    assert bundle['classes'] == EMOTIONS
-    assert bundle['metrics']['accuracy'] > 0.125
+    assert set(bundle['classes']) <= set(EMOTIONS)
+    assert len(bundle['pipeline'].classes_) == len(bundle['classes'])
+    assert bundle['metrics']['accuracy'] > 1 / len(bundle['classes'])
+
+
+def test_corpora_parse_and_namespace_speakers(tmp_path):
+    import soundfile as sf
+    from corpora import SHARED_EMOTIONS, list_clips
+
+    rav = tmp_path / 'rav' / 'Actor_01'
+    rav.mkdir(parents=True)
+    cre = tmp_path / 'cre' / 'AudioWAV'
+    cre.mkdir(parents=True)
+    y = voice_like(1.0)
+    for name in ['03-01-05-01-01-01-01.wav', '03-01-02-01-01-01-01.wav']:  # angry, calm
+        sf.write(rav / name, y, SAMPLE_RATE)
+    for name in ['1001_DFA_ANG_XX.wav', '1002_IEO_SAD_HI.wav', 'notes.wav']:
+        sf.write(cre / name, y, SAMPLE_RATE)
+    (cre.parent / 'VideoDemographics.csv').write_text('"ActorID","Age","Sex","Race","Ethnicity"\n1001,51,"Male","X","Y"\n')
+
+    r = list_clips('ravdess', tmp_path / 'rav')
+    c = list_clips('cremad', tmp_path / 'cre')
+    assert {(x.emotion, x.speaker, x.sex) for x in r} == {('angry', 'ravdess:1', 'male'), ('calm', 'ravdess:1', 'male')}
+    assert [(x.emotion, x.speaker, x.sex) for x in c] == [('angry', 'cremad:1001', 'male'), ('sad', 'cremad:1002', 'unknown')]
+    assert {x.emotion for x in c} <= set(SHARED_EMOTIONS)

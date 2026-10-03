@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Voice Stress Detector</title>
-<meta name="description" content="Record your voice and get an emotion and vocal-stress reading from a WavLM-based model trained on RAVDESS." />
+<meta name="description" content="Record your voice and get an emotion and vocal-stress reading from a WavLM-based model trained on RAVDESS and CREMA-D." />
 <style>
   :root {
     --bg: #f7f7fb; --card: #ffffff; --border: #e3e3ee; --text: #1b1b2b; --muted: #6a6a80;
@@ -84,7 +84,7 @@
     <h1>🎙️ Voice Stress Detector</h1>
     <p>Say a sentence the way you feel it. The model listens to <em>how</em> you speak, not the words.</p>
     <div class="pills">
-      <span class="pill">79% accuracy on unseen speakers · 8 emotions</span>
+      <span class="pill">75% accuracy on unseen speakers · 6 emotions</span>
       <span class="pill">WavLM + linear classifier</span>
       <span class="pill"><a href="https://github.com/tejaswaghere/stress-detection-using-voice-analysis">GitHub ↗</a></span>
     </div>
@@ -127,11 +127,13 @@
       <p>Your audio is converted to 16 kHz mono in the browser and sent to the model on
         <a id="space-link" href="https://huggingface.co/spaces/tejaswaghere/stress-detection">Hugging Face Spaces</a>.
         There, silence is trimmed and volume normalised. A frozen <strong>WavLM</strong> speech model turns the audio
-        into an embedding, and a linear classifier trained on <strong>RAVDESS</strong> outputs 8 emotion probabilities.</p>
+        into an embedding, and a linear classifier trained on <strong>RAVDESS + CREMA-D</strong> (115 actors) outputs
+        probabilities for 6 emotions: neutral, happy, sad, angry, fearful and disgust.</p>
       <p>The <strong>stress index</strong> weights those probabilities by how strongly each emotion reflects tense,
         negative, high-arousal speech (angry and fearful count most, calm and neutral count zero).</p>
       <ul>
-        <li>79% accuracy is measured on actors the model never heard. Real-world, natural speech is harder.</li>
+        <li>75% accuracy is measured on actors the model never heard. A model trained on one dataset scored only 38% on
+          another, so your microphone and room, effectively a new dataset, will lower accuracy.</li>
         <li>Trained on acted North-American English, so other accents, languages and noisy mics reduce accuracy.</li>
         <li>Stress is inferred, not measured. This is not a medical or HR tool.</li>
         <li>The free Space sleeps when idle. The first request may take about a minute while it wakes up.</li>
@@ -139,7 +141,8 @@
     </details>
   </section>
 
-  <footer>Built with librosa, WavLM, scikit-learn and Gradio · <a href="https://zenodo.org/record/1188976">RAVDESS</a> (CC BY-NC-SA 4.0)</footer>
+  <footer>Built with librosa, WavLM, scikit-learn and Gradio · <a href="https://zenodo.org/record/1188976">RAVDESS</a> (CC BY-NC-SA 4.0) ·
+    <a href="https://github.com/CheyneyComputerScience/CREMA-D">CREMA-D</a> (ODbL)</footer>
 </main>
 
 <script type="module">

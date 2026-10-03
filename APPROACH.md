@@ -46,7 +46,7 @@ Changes from v2 and why:
 This is still kept (`--features handcrafted`) because it needs no torch, trains in seconds, and is
 interpretable (`results/handcrafted_svm/feature_importance.png`).
 
-## Pretrained speech embeddings (v3 default, 79%)
+## Pretrained speech embeddings (RAVDESS-only: 79%)
 
 Frozen `microsoft/wavlm-base-plus`, with hidden states mean-pooled over time. A per-layer linear probe
 ([results/layer_probe.json](results/layer_probe.json)) gave:
@@ -74,6 +74,51 @@ linear, fast, gives sensible probabilities, and saves to 42 KB.
 The selection was made on the same CV folds that report the final score, which adds a small optimistic bias.
 A nested CV or an external test set (e.g. CREMA-D) would remove it.
 
+## Lesson 3: unseen speakers ≠ unseen recording conditions (v3.1)
+
+Speaker-independent CV still keeps the studio, the microphone, the sentences and the acting direction fixed.
+A demo user changes all of them. To measure that, CREMA-D was added: 91 actors aged 20–74 from diverse
+backgrounds, 12 sentences, recorded separately from RAVDESS. Both corpora share 6 emotions. All numbers below
+are UAR (mean per-class recall) on unseen speakers, with chance at 16.7% (`src/cross_corpus.py`).
+
+| Train → test | WavLM | Hand-crafted |
+|---|---|---|
+| RAVDESS → RAVDESS | 81.3% | 59.1% |
+| CREMA-D → CREMA-D | 75.3% | 55.1% |
+| RAVDESS → CREMA-D | 37.7% | 14.3% |
+| CREMA-D → RAVDESS | 58.3% | 23.9% |
+| … with per-corpus z-scoring | 45.3% / 70.4% | 32.7% / 37.5% |
+| pooled → RAVDESS / CREMA-D | 77.9% / 75.3% | 53.4% / 55.7% |
+
+**Diagnosis.** The RAVDESS-only WavLM model labels 51% of CREMA-D clips *fearful* (true share: 17%), so it isn't
+making random errors. The whole CREMA-D distribution sits in the region RAVDESS associates with fear. Standardising
+each corpus by its own mean and standard deviation (no labels needed) cuts that to 18% and recovers 8–12 points UAR.
+So most of the transfer gap is a channel and recording offset, not a lack of emotion knowledge. Hand-crafted features
+fail almost completely: RAVDESS → CREMA-D is below chance with macro-F1 0.07, a near-total collapse onto one class.
+
+**Decision: ship a pooled model.** Training on both corpora matches the CREMA-D-only model on CREMA-D (75.3%) and
+costs 3 points on RAVDESS. It also narrows the male/female gap from 10 to 4 points UAR, and its fold-to-fold
+spread drops from ±3.7 to ±1.8 because 115 speakers give a much more stable estimate than 24. Regularisation
+was re-checked for the larger dataset: C = 0.01 is still best (C ∈ {0.003, 0.01, 0.03, 0.1}).
+Per-corpus normalisation isn't used at inference, because a single user clip has no "corpus statistics" to
+normalise with. A running per-user baseline is on the roadmap.
+
+**The calm problem.** CREMA-D has no *calm*. Three options were compared with out-of-fold predictions:
+
+| Option | RAVDESS UAR | CREMA-D UAR | Unseen calm clips scored ≥ 30 stress |
+|---|---|---|---|
+| drop calm | 78.0% | 75.3% | 61% (read as *sad*) |
+| calm as a 7th class | 74.0% | 75.4% | 5% |
+| **merge calm → neutral** | **78.3%** | **75.2%** | **18%** |
+
+The 7-class model looks best on calm clips, but it predicted *calm* for exactly 0.0% of CREMA-D clips, including
+CREMA-D's quiet neutral and sad ones. It had learned "RAVDESS recording conditions = calm", which would never fire for
+a user on their own microphone. Merging calm into neutral teaches "calm voice → no stress" in a way that doesn't
+depend on recording conditions, so that is what ships.
+
+**Data quality.** One CREMA-D file (`1076_MTI_SAD_XX.wav`) is silent. The extractor skips unusable clips and
+lists them in the cache, and it checkpoints every 500 clips. The first full run crashed on that file after 16 minutes.
+
 ## Stress index
 
 RAVDESS has no stress labels, so stress is a function of the emotion posterior. On the circumplex model,
@@ -97,14 +142,18 @@ predictions. One of them (happy, actor 23) is misclassified as surprised, which 
 
 ## Known limitations
 
-1. **Acted, English-only, two sentences.** Natural speech is subtler. Expect lower real-world accuracy.
-2. **Speaker variance.** Per-actor accuracy ranges from 52% to 92%. Male voices average 74% vs 84% for female voices.
+1. **Acted, English-only, fixed sentences.** Natural speech is subtler, and the cross-corpus results show that a new
+   recording setup alone can cost a lot. Expect lower real-world accuracy.
+2. **Speaker variance.** With the pooled model, per-speaker accuracy ranges from 46% to 94%. Male voices score 73.5% UAR
+   against 77.3% for female voices.
 3. **Closed-set and overconfident.** Non-speech or very noisy input still gets a confident label.
 4. **No speaker normalisation.** Each prediction sees one clip with no baseline for that speaker's neutral voice.
 
 ## Next steps
 
-- Train on RAVDESS + CREMA-D (91 speakers), evaluate cross-corpus.
+- Test on a third, never-used corpus (e.g. SAVEE, TESS, or naturalistic MSP-Podcast).
+- Per-user baseline: z-score a user's clips against their own neutral recording (the inference-time analogue of
+  the per-corpus normalisation that recovered 8–12 points).
 - Fine-tune WavLM's upper layers with a gradient-reversal speaker head.
 - Temperature-scale the classifier and add a speech/non-speech gate.
 - Per-user calibration: record a neutral baseline, then score deviations from it.

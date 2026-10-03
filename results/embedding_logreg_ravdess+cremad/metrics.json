@@ -1,16 +1,15 @@
 {
   "corpora": [
-    "ravdess"
+    "ravdess",
+    "cremad"
   ],
   "emotions": [
     "neutral",
-    "calm",
     "happy",
     "sad",
     "angry",
     "fearful",
-    "disgust",
-    "surprised"
+    "disgust"
   ],
   "features": "embedding",
   "model": "logreg",
@@ -21,36 +20,40 @@
     6,
     7
   ],
-  "n_clips": 1440,
-  "n_speakers": 24,
+  "n_clips": 8689,
+  "n_speakers": 115,
   "n_features": 768,
   "evaluation": "6-fold GroupKFold by speaker (speaker-independent)",
-  "accuracy": 0.7931,
-  "accuracy_fold_std": 0.0375,
-  "uar": 0.793,
-  "macro_f1": 0.7901,
-  "accuracy_random_split_leaky": 0.8875,
+  "accuracy": 0.7524,
+  "accuracy_fold_std": 0.0185,
+  "uar": 0.7535,
+  "macro_f1": 0.7525,
+  "accuracy_random_split_leaky": 0.7757,
   "per_class_f1": {
-    "neutral": 0.7379,
-    "calm": 0.8084,
-    "happy": 0.7817,
-    "sad": 0.6408,
-    "angry": 0.8617,
-    "fearful": 0.798,
-    "disgust": 0.8535,
-    "surprised": 0.8391
+    "neutral": 0.8172,
+    "happy": 0.7705,
+    "sad": 0.6485,
+    "angry": 0.8479,
+    "fearful": 0.6908,
+    "disgust": 0.7403
   },
   "per_corpus": {
     "ravdess": {
-      "accuracy": 0.7931,
-      "uar": 0.793
+      "accuracy": 0.7716,
+      "uar": 0.7685
+    },
+    "cremad": {
+      "accuracy": 0.7492,
+      "uar": 0.7521
     }
   },
   "uar_by_sex": {
-    "male": 0.7513,
-    "female": 0.8346
+    "male": 0.7354,
+    "female": 0.7734
   },
-  "label_merge": {},
+  "label_merge": {
+    "calm": "neutral"
+  },
   "final_fit_excludes_speakers": [
     "ravdess:23",
     "ravdess:24"
@@ -60,9 +63,7 @@
     "fearful": 1.0,
     "disgust": 0.7,
     "sad": 0.45,
-    "surprised": 0.35,
     "happy": 0.1,
-    "neutral": 0.0,
-    "calm": 0.0
+    "neutral": 0.0
   }
 }

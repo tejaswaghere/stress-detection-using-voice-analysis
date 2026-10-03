@@ -23,7 +23,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent if (HERE.parent / 'src').exists() else HERE  # repo layout or flat Space layout
 sys.path.insert(0, str(ROOT / 'src'))
 
-from features import EMOTIONS, SAMPLE_RATE, describe_audio  # noqa: E402
+from features import SAMPLE_RATE, describe_audio  # noqa: E402
 from predict import Predictor  # noqa: E402
 from stress import STRESS_WEIGHTS  # noqa: E402
 
@@ -31,12 +31,19 @@ MODEL_PATH = Path(os.environ.get('MODEL_PATH', ROOT / 'models' / 'emotion_model.
 EXAMPLES_DIR = ROOT / 'app' / 'examples' if (ROOT / 'app' / 'examples').exists() else ROOT / 'examples'
 REPO_URL = 'https://github.com/tejaswaghere/stress-detection-using-voice-analysis'
 
-EMOJI = dict(zip(EMOTIONS, ['😐', '😌', '😊', '😢', '😠', '😨', '🤢', '😲']))
-COLORS = dict(zip(EMOTIONS, ['#94a3b8', '#38bdf8', '#facc15', '#6366f1', '#ef4444', '#a855f7', '#22c55e', '#fb923c']))
+EMOJI = {'neutral': '😐', 'calm': '😌', 'happy': '😊', 'sad': '😢', 'angry': '😠', 'fearful': '😨', 'disgust': '🤢', 'surprised': '😲'}
+COLORS = {'neutral': '#94a3b8', 'calm': '#38bdf8', 'happy': '#facc15', 'sad': '#6366f1', 'angry': '#ef4444',
+          'fearful': '#a855f7', 'disgust': '#22c55e', 'surprised': '#fb923c'}
+CORPUS_INFO = {'ravdess': ('RAVDESS', 24, 1440), 'cremad': ('CREMA-D', 91, 7441)}
 LEVEL_COLORS = {'low': '#16a34a', 'moderate': '#d97706', 'high': '#dc2626'}
 
 predictor = Predictor(MODEL_PATH)
 M = predictor.bundle['metrics']
+CLASSES = predictor.classes
+CORPORA = M.get('corpora', ['ravdess'])
+DATA_DESC = ' + '.join(CORPUS_INFO[c][0] for c in CORPORA)
+N_SPEAKERS = sum(CORPUS_INFO[c][1] for c in CORPORA)
+N_CLIPS = sum(CORPUS_INFO[c][2] for c in CORPORA)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -88,9 +95,9 @@ def analysis_plot(pred, info):
         # Each window describes its centre; hold the first/last values out to the clip edges
         centres = np.concatenate([[0], centres, [t[-1]]])
         probs = [probs[0], *probs, probs[-1]]
-        stack = np.array([[p[e] for e in EMOTIONS] for p in probs]).T
-        axes[2].stackplot(centres, stack, colors=[COLORS[e] for e in EMOTIONS], labels=EMOTIONS, alpha=0.9)
-        stress = [100 * sum(STRESS_WEIGHTS[e] * p[e] for e in EMOTIONS) for p in probs]
+        stack = np.array([[p[e] for e in CLASSES] for p in probs]).T
+        axes[2].stackplot(centres, stack, colors=[COLORS[e] for e in CLASSES], labels=CLASSES, alpha=0.9)
+        stress = [100 * sum(STRESS_WEIGHTS[e] * p[e] for e in CLASSES) for p in probs]
         ax2 = axes[2].twinx()
         ax2.plot(centres, stress, 'k-', lw=2, label='stress index')
         ax2.set_ylim(0, 100)
@@ -170,9 +177,9 @@ def header_html() -> str:
       <p style="margin:0;color:var(--body-text-color-subdued)">Say a sentence the way you feel it. The model listens to
       <i>how</i> you speak (pitch, energy, voice quality), not the words.</p>
       <div class="stats">
-        <span class="stat">🎯 {M['accuracy']:.0%} accuracy on unseen speakers (8 classes, chance 12.5%)</span>
+        <span class="stat">🎯 {M['accuracy']:.0%} accuracy on unseen speakers ({len(CLASSES)} emotions, chance {1 / len(CLASSES):.0%})</span>
         <span class="stat">🧠 {feats} + {M['model']}</span>
-        <span class="stat">📚 RAVDESS · 24 actors · 1440 clips</span>
+        <span class="stat">📚 {DATA_DESC} · {N_SPEAKERS} actors · {N_CLIPS:,} clips</span>
         <span class="stat"><a href="{REPO_URL}" target="_blank">GitHub ↗</a></span>
       </div>
     </div>"""
@@ -182,17 +189,20 @@ ABOUT_MD = f"""
 ### How it works
 1. **Preprocess** — resample to 16 kHz, trim silence, normalise volume (so mic gain doesn't look like anger).
 2. **Embed** — a frozen, pretrained speech model turns the audio into a vector that captures prosody and voice quality.
-3. **Classify** — a small linear classifier trained on RAVDESS outputs probabilities for 8 emotions.
+3. **Classify** — a small linear classifier trained on {DATA_DESC} outputs probabilities for {len(CLASSES)} emotions
+   ({', '.join(CLASSES)}).
 4. **Stress index** — the probabilities are combined using arousal/valence weights
-   ({', '.join(f'{k} {v:g}' for k, v in STRESS_WEIGHTS.items() if v)}).
+   ({', '.join(f'{k} {v:g}' for k, v in STRESS_WEIGHTS.items() if v and k in CLASSES)}).
 
 ### Honest limitations
 - **Evaluated speaker-independently:** {M['accuracy']:.1%} accuracy / {M['macro_f1']:.2f} macro-F1 on actors never seen in training.
   The same model scores {M['accuracy_random_split_leaky']:.1%} on a random clip split, which leaks speakers — that's
   why the README reports the lower number.
-- **Acted speech:** RAVDESS actors exaggerate emotions in two fixed sentences of North-American English. Natural,
+- **Cross-corpus generalisation is the hard part:** a model trained on RAVDESS alone scores 38% (UAR) on CREMA-D, which
+  is why this model is trained on both. Your microphone and room are another new "corpus", so expect lower accuracy than above.
+- **Acted speech:** both datasets use actors performing fixed sentences in North-American English. Natural,
   subtle speech, other languages, background noise and phone mics are all harder.
-- **"Stress" is derived, not measured** — RAVDESS has no stress labels. Treat the index as an indicator of tense,
+- **"Stress" is derived, not measured** — neither dataset has stress labels. Treat the index as an indicator of tense,
   negative-arousal vocal delivery, not a diagnosis. **Not a medical or HR tool.**
 - Audio is processed in memory to make the prediction and is not stored by this app.
 """
@@ -227,7 +237,7 @@ def build_ui() -> gr.Blocks:
                         run_on_click=True,
                         cache_examples=False,
                         api_name='run_example', api_visibility='private',
-                        label='Try a RAVDESS clip (from actors held out of training)',
+                        label='Try a RAVDESS clip (actors 23 & 24, held out of training)',
                         example_labels=[p.stem.replace('_', ' ') for p in examples],
                     )
                 gr.Markdown('💡 *Try saying "I can\'t believe this is happening" angrily, then calmly.*')

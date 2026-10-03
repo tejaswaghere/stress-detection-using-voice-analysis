@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented here.
 
+## [v3.1.0] — 2026-10-04
+
+### Added
+- **CREMA-D** (91 actors, 7,441 usable clips) via `src/corpora.py`, a uniform loader for both corpora with a shared
+  6-emotion label set, namespaced speaker IDs, cached extraction that skips bad files, and checkpointing.
+- **Cross-corpus study** (`src/cross_corpus.py`, `results/cross_corpus/`). A RAVDESS-only model drops from 81% to 38% UAR
+  on CREMA-D. Per-corpus normalisation recovers 8–12 points. Hand-crafted features fall below chance across corpora.
+- `scripts/download_cremad.py` (resumable) and tests for corpus parsing.
+- Per-speaker accuracy plot that scales to 115 speakers, coloured by sex, with per-sex means.
+
+### Changed
+- **Shipped model is now trained on RAVDESS + CREMA-D** (6 emotions): 75.2% accuracy / 75.3% UAR on 115 unseen
+  speakers, with fold spread ±1.8. The male/female gap narrowed from 10 to 4 points.
+- RAVDESS *calm* is merged into *neutral*, which cuts the share of calm voices flagged as stressed from 61% to 18%.
+  *Surprised* is no longer predicted.
+- `train.py` takes `--corpora` and reports UAR, per-corpus and per-sex metrics.
+- App, Space description and browser demo read the label set and dataset stats from the model bundle.
+- Example clips: *neutral* and *disgust* replace *calm* and *surprised*. All are still from held-out actors 23 and 24.
+
 ## [v3.0.0] — 2026-10-03
 
 ### Fixed

@@ -1,0 +1,96 @@
+{
+  "features": "embedding",
+  "model": "logreg",
+  "emotions": [
+    "neutral",
+    "happy",
+    "sad",
+    "angry",
+    "fearful",
+    "disgust"
+  ],
+  "chance_uar": 0.1667,
+  "protocol": "within-corpus and pooled: 6-fold GroupKFold by speaker; cross-corpus: fit on all of A, test on all of B",
+  "results": {
+    "ravdess->ravdess": {
+      "uar": 0.8134,
+      "accuracy": 0.8134,
+      "macro_f1": 0.8111,
+      "n": 1056,
+      "uar_male": 0.7795,
+      "uar_female": 0.8472
+    },
+    "cremad->cremad": {
+      "uar": 0.7529,
+      "accuracy": 0.75,
+      "macro_f1": 0.7511,
+      "n": 7441,
+      "uar_male": 0.7389,
+      "uar_female": 0.7685
+    },
+    "ravdess->cremad": {
+      "uar": 0.3771,
+      "accuracy": 0.3805,
+      "macro_f1": 0.3692,
+      "n": 7441,
+      "uar_male": 0.3626,
+      "uar_female": 0.3934
+    },
+    "cremad->ravdess": {
+      "uar": 0.5825,
+      "accuracy": 0.5758,
+      "macro_f1": 0.575,
+      "n": 1056,
+      "uar_male": 0.5729,
+      "uar_female": 0.592
+    },
+    "ravdess->cremad+corpus_norm": {
+      "uar": 0.453,
+      "accuracy": 0.4624,
+      "macro_f1": 0.4332,
+      "n": 7441,
+      "uar_male": 0.4657,
+      "uar_female": 0.4387
+    },
+    "cremad->ravdess+corpus_norm": {
+      "uar": 0.704,
+      "accuracy": 0.6828,
+      "macro_f1": 0.6725,
+      "n": 1056,
+      "uar_male": 0.6927,
+      "uar_female": 0.7153
+    },
+    "both->ravdess": {
+      "uar": 0.7795,
+      "accuracy": 0.7803,
+      "macro_f1": 0.7776,
+      "n": 1056,
+      "uar_male": 0.7344,
+      "uar_female": 0.8247
+    },
+    "both->cremad": {
+      "uar": 0.7531,
+      "accuracy": 0.75,
+      "macro_f1": 0.751,
+      "n": 7441,
+      "uar_male": 0.7367,
+      "uar_female": 0.7715
+    },
+    "both->ravdess+corpus_norm": {
+      "uar": 0.7778,
+      "accuracy": 0.7737,
+      "macro_f1": 0.7668,
+      "n": 1056,
+      "uar_male": 0.7448,
+      "uar_female": 0.8108
+    },
+    "both->cremad+corpus_norm": {
+      "uar": 0.7528,
+      "accuracy": 0.7499,
+      "macro_f1": 0.7509,
+      "n": 7441,
+      "uar_male": 0.7365,
+      "uar_female": 0.7712
+    }
+  }
+}

@@ -4,7 +4,7 @@ out-of-fold predictions (see train.py).
 
   confusion_matrix.png    which emotions get confused with which
   roc_curves.png          one-vs-rest ROC per emotion
-  per_actor_accuracy.png  how much accuracy varies between unseen speakers
+  per_speaker_accuracy.png how much accuracy varies between unseen speakers
   feature_importance.png  permutation importance (handcrafted features only)
 """
 
@@ -15,6 +15,7 @@ from pathlib import Path
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.patches import Patch  # noqa: E402
 import numpy as np  # noqa: E402
 import seaborn as sns  # noqa: E402
 from sklearn.metrics import auc, confusion_matrix, roc_curve  # noqa: E402
@@ -29,7 +30,8 @@ def _save(fig, path):
     print(f"[eval] Saved {path}")
 
 
-def plot_confusion_matrix(y_true, y_pred, class_names, save_path='results/confusion_matrix.png'):
+def plot_confusion_matrix(y_true, y_pred, class_names, save_path='results/confusion_matrix.png',
+                          title='Confusion matrix — speaker-independent (unseen actors)'):
     """Row-normalised confusion matrix: row = true emotion, column = predicted."""
     cm = confusion_matrix(y_true, y_pred, normalize='true')
     fig, ax = plt.subplots(figsize=(9, 7.5))
@@ -37,8 +39,20 @@ def plot_confusion_matrix(y_true, y_pred, class_names, save_path='results/confus
                 xticklabels=class_names, yticklabels=class_names, linewidths=0.5, ax=ax)
     ax.set_xlabel('Predicted')
     ax.set_ylabel('True')
-    ax.set_title('Confusion matrix — speaker-independent (unseen actors)', fontweight='bold')
+    ax.set_title(title, fontweight='bold')
     plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+    _save(fig, save_path)
+
+
+def plot_transfer_matrix(M, row_labels, col_labels, title, save_path, chance=None):
+    """Heatmap of a train-corpus × test-corpus score matrix."""
+    fig, ax = plt.subplots(figsize=(6.4, 3.6))
+    sns.heatmap(M, annot=True, fmt='.2f', cmap='Purples', vmin=chance or 0, vmax=1, cbar_kws={'label': 'UAR'},
+                xticklabels=col_labels, yticklabels=row_labels, linewidths=1, ax=ax)
+    ax.set_xlabel('Test corpus (unseen speakers)')
+    ax.set_ylabel('Train corpus')
+    ax.set_title(title + (f'\nchance = {chance:.2f}' if chance else ''), fontweight='bold', fontsize=11)
+    plt.setp(ax.get_yticklabels(), rotation=0)
     _save(fig, save_path)
 
 
@@ -58,21 +72,31 @@ def plot_roc_curves(y_true, y_proba, class_names, save_path='results/roc_curves.
     _save(fig, save_path)
 
 
-def plot_per_actor_accuracy(actors, y_true, y_pred, save_path='results/per_actor_accuracy.png'):
-    """Accuracy for each actor when that actor was held out. Odd IDs are male, even are female."""
-    ids = np.unique(actors)
-    acc = np.array([np.mean(y_pred[actors == a] == y_true[actors == a]) for a in ids])
-    colors = ['#4C72B0' if a % 2 else '#DD8452' for a in ids]
-    fig, ax = plt.subplots(figsize=(10, 4))
-    ax.bar([str(a) for a in ids], acc, color=colors)
-    ax.axhline(acc.mean(), color='k', ls='--', lw=1, label=f'mean {acc.mean():.2f}')
-    ax.axhline(1 / 8, color='grey', ls=':', lw=1, label='chance (0.125)')
-    ax.set_ylim(0, 1.15)
+def plot_per_speaker_accuracy(speakers, sex, y_true, y_pred, save_path='results/per_speaker_accuracy.png', chance=None):
+    """Accuracy for each speaker when that speaker was held out, sorted, coloured by sex."""
+    ids = np.unique(speakers)
+    acc = np.array([np.mean(y_pred[speakers == s] == y_true[speakers == s]) for s in ids])
+    sx = np.array([sex[speakers == s][0] for s in ids])
+    order = np.argsort(acc)
+    ids, acc, sx = ids[order], acc[order], sx[order]
+    palette = {'male': '#4C72B0', 'female': '#DD8452'}
+    fig, ax = plt.subplots(figsize=(10 if len(ids) <= 30 else 12, 4))
+    ax.bar(range(len(ids)), acc, color=[palette.get(s, '#999999') for s in sx], width=0.85)
+    handles = [Patch(color=c, label=f'{s} (mean {acc[sx == s].mean():.2f})') for s, c in palette.items() if (sx == s).any()]
+    handles.append(ax.axhline(acc.mean(), color='k', ls='--', lw=1, label=f'all speakers (mean {acc.mean():.2f})'))
+    if chance:
+        handles.append(ax.axhline(chance, color='grey', ls=':', lw=1, label=f'chance ({chance:.3f})'))
+    if len(ids) <= 30:
+        ax.set_xticks(range(len(ids)), [i.split(':')[-1] for i in ids])
+        ax.set_xlabel('Speaker (sorted by accuracy)')
+    else:
+        ax.set_xticks([])
+        ax.set_xlabel(f'{len(ids)} speakers, sorted by accuracy')
+    ax.set_ylim(0, 1.18)
     ax.set_yticks(np.arange(0, 1.01, 0.2))
-    ax.set_xlabel('Actor (blue = male, orange = female)')
     ax.set_ylabel('Accuracy')
-    ax.set_title('Accuracy per held-out actor', fontweight='bold')
-    ax.legend(loc='upper center', ncol=2, frameon=False)
+    ax.set_title('Accuracy per held-out speaker', fontweight='bold')
+    ax.legend(handles=handles, loc='upper left', ncol=2, frameon=False, fontsize=9)
     _save(fig, save_path)
 
 
