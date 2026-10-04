@@ -28,7 +28,7 @@ sdk_version: {gradio_version}
 app_file: app.py
 pinned: false
 license: mit
-short_description: Emotion & vocal stress from speech (WavLM, {acc:.0%} unseen-speaker)
+short_description: {short_description}
 models:
   - microsoft/wavlm-base-plus
 tags:
@@ -82,7 +82,10 @@ def build(out: Path) -> Path:
     m = bundle['metrics']
     corpora = m.get('corpora', ['ravdess'])
     names = {'ravdess': ('RAVDESS', 24), 'cremad': ('CREMA-D', 91)}
+    short_description = f"Emotion & vocal stress from speech, {m['accuracy']:.0%} on new voices"
+    assert len(short_description) <= 60, 'Hugging Face rejects short_description over 60 characters'
     (out / 'README.md').write_text(SPACE_README.format(
+        short_description=short_description,
         gradio_version=gradio.__version__, acc=m['accuracy'], n_classes=len(bundle['classes']),
         classes=', '.join(bundle['classes']), chance=1 / len(bundle['classes']),
         data=' + '.join(names[c][0] for c in corpora), n_speakers=sum(names[c][1] for c in corpora),
