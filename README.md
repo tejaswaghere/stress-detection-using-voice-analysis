@@ -10,6 +10,10 @@
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue?style=flat-square)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
+<p align="center">
+  <img src="docs/demo.gif" alt="Demo: pick a clip, get emotion probabilities and a stress index; a calm-then-angry recording shows the emotion timeline shifting from neutral to angry as stress rises from about 10 to 95" width="860">
+</p>
+
 ---
 
 ## 🚀 Live demos

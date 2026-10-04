@@ -42,8 +42,8 @@ M = predictor.bundle['metrics']
 CLASSES = predictor.classes
 CORPORA = M.get('corpora', ['ravdess'])
 DATA_DESC = ' + '.join(CORPUS_INFO[c][0] for c in CORPORA)
-N_SPEAKERS = sum(CORPUS_INFO[c][1] for c in CORPORA)
-N_CLIPS = sum(CORPUS_INFO[c][2] for c in CORPORA)
+N_SPEAKERS = M.get('n_speakers', sum(CORPUS_INFO[c][1] for c in CORPORA))
+N_CLIPS = M.get('n_clips', sum(CORPUS_INFO[c][2] for c in CORPORA))  # clips actually used for training
 
 
 # ─────────────────────────────────────────────────────────────────────────────
