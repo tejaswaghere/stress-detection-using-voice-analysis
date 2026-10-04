@@ -224,6 +224,11 @@ async function analyze(blob) {
     setStatus("Analysing…", { busy: true });
     const res = await c.predict("/analyze", { audio_path: wav });
     const out = res.data[res.data.length - 1];  // last output is the JSON summary
+    if (out.speech_detected === false) {  // the speech gate rejected music / noise / non-speech
+      $("result").style.display = "none";
+      setStatus("🔇 " + out.message, { error: true });
+      return;
+    }
     render(out);
     setStatus("");
   } catch (err) {

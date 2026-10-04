@@ -61,13 +61,16 @@ def standardise(X: np.ndarray) -> np.ndarray:
     return (X - X.mean(0)) / (X.std(0) + 1e-8)
 
 
-def scores(y, pred, sex) -> dict:
+def scores(y, pred, sex, proba=None) -> dict:
     out = {
         'uar': round(float(balanced_accuracy_score(y, pred)), 4),
         'accuracy': round(float(accuracy_score(y, pred)), 4),
         'macro_f1': round(float(f1_score(y, pred, average='macro')), 4),
         'n': int(len(y)),
     }
+    if proba is not None:
+        out['ece'] = round(evaluate.expected_calibration_error(y, proba), 4)
+        out['mean_confidence'] = round(float(proba.max(1).mean()), 4)
     for s in ('male', 'female'):
         m = sex == s
         if m.any():
@@ -91,8 +94,10 @@ def main():
     # ── Within-corpus (speaker-independent CV) ───────────────────────────────
     for c in CORPORA:
         X, y, spk, sex = data[c]
-        p = cross_val_predict(build_pipeline(model_type), X, y, groups=spk, cv=GroupKFold(N_FOLDS), n_jobs=N_FOLDS)
-        results[f'{c}->{c}'] = scores(y, p, sex)
+        P = cross_val_predict(build_pipeline(model_type), X, y, groups=spk, cv=GroupKFold(N_FOLDS),
+                              method='predict_proba', n_jobs=N_FOLDS)
+        p = P.argmax(1)
+        results[f'{c}->{c}'] = scores(y, p, sex, P)
         preds[f'{c}->{c}'] = (y, p)
 
     # ── Cross-corpus: fit on all of A, test on all of B ──────────────────────
@@ -102,9 +107,10 @@ def main():
             Xb, yb, _, sexb = data[b]
             if norm:
                 Xa, Xb = standardise(Xa), standardise(Xb)
-            p = build_pipeline(model_type).fit(Xa, ya).predict(Xb)
+            P = build_pipeline(model_type).fit(Xa, ya).predict_proba(Xb)
+            p = P.argmax(1)
             key = f'{a}->{b}' + ('+corpus_norm' if norm else '')
-            results[key] = scores(yb, p, sexb)
+            results[key] = scores(yb, p, sexb, P)
             preds[key] = (yb, p)
 
     # ── Pooled training, speaker-independent CV over all speakers ────────────
@@ -133,10 +139,11 @@ def main():
     }
     (out / 'metrics.json').write_text(json.dumps(meta, indent=2))
 
-    print(f"\n{'condition':32s} {'UAR':>6s} {'acc':>6s} {'F1':>6s} {'UAR♂':>6s} {'UAR♀':>6s}")
+    print(f"\n{'condition':32s} {'UAR':>6s} {'acc':>6s} {'F1':>6s} {'UAR♂':>6s} {'UAR♀':>6s} {'conf':>6s} {'ECE':>6s}")
     for k, r in results.items():
         print(f"{k:32s} {r['uar']:6.3f} {r['accuracy']:6.3f} {r['macro_f1']:6.3f} "
-              f"{r.get('uar_male', float('nan')):6.3f} {r.get('uar_female', float('nan')):6.3f}")
+              f"{r.get('uar_male', float('nan')):6.3f} {r.get('uar_female', float('nan')):6.3f} "
+              f"{r.get('mean_confidence', float('nan')):6.3f} {r.get('ece', float('nan')):6.3f}")
 
     rows = ['ravdess', 'cremad', 'both']
     for suffix, title in [('', 'no adaptation'), ('+corpus_norm', 'per-corpus normalisation')]:

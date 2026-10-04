@@ -74,11 +74,13 @@ def build(out: Path) -> Path:
         shutil.rmtree(out)
     (out / 'src').mkdir(parents=True)
     shutil.copy(ROOT / 'app' / 'app.py', out / 'app.py')
-    for f in ['__init__.py', 'features.py', 'embeddings.py', 'model.py', 'predict.py', 'stress.py']:
+    for f in ['__init__.py', 'features.py', 'embeddings.py', 'gate.py', 'model.py', 'predict.py', 'stress.py']:
         shutil.copy(ROOT / 'src' / f, out / 'src' / f)
     shutil.copytree(ROOT / 'app' / 'examples', out / 'examples')
     (out / 'models').mkdir()
     shutil.copy(ROOT / 'models' / 'emotion_model.joblib', out / 'models' / 'emotion_model.joblib')
+    if (ROOT / 'models' / 'speech_gate.joblib').exists():
+        shutil.copy(ROOT / 'models' / 'speech_gate.joblib', out / 'models' / 'speech_gate.joblib')
     m = bundle['metrics']
     corpora = m.get('corpora', ['ravdess'])
     names = {'ravdess': ('RAVDESS', 24), 'cremad': ('CREMA-D', 91)}

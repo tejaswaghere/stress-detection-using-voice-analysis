@@ -129,3 +129,30 @@ def test_corpora_parse_and_namespace_speakers(tmp_path):
     assert {(x.emotion, x.speaker, x.sex) for x in r} == {('angry', 'ravdess:1', 'male'), ('calm', 'ravdess:1', 'male')}
     assert [(x.emotion, x.speaker, x.sex) for x in c] == [('angry', 'cremad:1001', 'male'), ('sad', 'cremad:1002', 'unknown')]
     assert {x.emotion for x in c} <= set(SHARED_EMOTIONS)
+
+
+def test_speech_gate_rejects_and_accepts(tmp_path):
+    import joblib
+    from gate import NoSpeechError, SpeechGate, build_gate
+
+    rng = np.random.default_rng(0)
+    speech, noise = rng.normal(1, 1, (60, 8)), rng.normal(-1, 1, (60, 8))
+    pipe = build_gate().fit(np.vstack([speech, noise]), np.r_[np.ones(60), np.zeros(60)])
+    path = tmp_path / 'gate.joblib'
+    joblib.dump({'pipeline': pipe, 'threshold': 0.5, 'backbone': 'b', 'layers': [1]}, path)
+
+    gate = SpeechGate(path)
+    assert gate.check(np.full(8, 2.0)) > 0.5
+    with pytest.raises(NoSpeechError, match='No clear speech'):
+        gate.check(np.full(8, -2.0))
+    assert issubclass(NoSpeechError, ValueError)  # callers that catch ValueError still handle it
+
+
+@pytest.mark.skipif(not (ROOT / 'models' / 'speech_gate.joblib').exists(), reason='no trained gate')
+def test_shipped_gate_matches_emotion_model():
+    import joblib
+
+    gate = joblib.load(ROOT / 'models' / 'speech_gate.joblib')
+    bundle = load_bundle(ROOT / 'models' / 'emotion_model.joblib')
+    assert (gate['backbone'], list(gate['layers'])) == (bundle['backbone'], list(bundle['layers']))
+    assert gate['pipeline'].n_features_in_ == bundle['pipeline'].n_features_in_

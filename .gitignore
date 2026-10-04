@@ -11,6 +11,7 @@ space/
 # Extra models; models/emotion_model.joblib is committed
 models/*
 !models/emotion_model.joblib
+!models/speech_gate.joblib
 
 .gradio/
 .ipynb_checkpoints/

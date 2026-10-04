@@ -56,6 +56,37 @@ def plot_transfer_matrix(M, row_labels, col_labels, title, save_path, chance=Non
     _save(fig, save_path)
 
 
+def expected_calibration_error(y_true, y_proba, n_bins=15) -> float:
+    """ECE: average gap between confidence and accuracy, weighted by how many predictions fall in each bin."""
+    conf, correct = y_proba.max(1), y_proba.argmax(1) == y_true
+    edges = np.linspace(0, 1, n_bins + 1)
+    return float(sum(np.mean(m) * abs(correct[m].mean() - conf[m].mean())
+                     for lo, hi in zip(edges[:-1], edges[1:]) if (m := (conf > lo) & (conf <= hi)).any()))
+
+
+def plot_reliability(y_true, y_proba, save_path, title='Calibration on unseen speakers', n_bins=10):
+    """Reliability diagram: when the model says X% confident, how often is it right?"""
+    conf, correct = y_proba.max(1), y_proba.argmax(1) == y_true
+    edges = np.linspace(0, 1, n_bins + 1)
+    mids, accs, counts = [], [], []
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        m = (conf > lo) & (conf <= hi)
+        if m.sum() >= 10:
+            mids.append(conf[m].mean()); accs.append(correct[m].mean()); counts.append(m.sum())
+    fig, ax = plt.subplots(figsize=(5.6, 5))
+    ax.plot([0, 1], [0, 1], 'k--', lw=1, label='perfect calibration')
+    ax.plot(mids, accs, 'o-', color='#6d4aff', lw=2, label=f'model (ECE {expected_calibration_error(y_true, y_proba):.3f})')
+    for x, a, n in zip(mids, accs, counts):
+        ax.annotate(f'{n}', (x, a), textcoords='offset points', xytext=(0, 8), ha='center', fontsize=7, color='grey')
+    ax.set_xlabel('Model confidence (top probability)')
+    ax.set_ylabel('Actual accuracy')
+    ax.set_xlim(0, 1); ax.set_ylim(0, 1.05)
+    ax.set_title(title, fontweight='bold')
+    ax.legend(loc='upper left')
+    ax.grid(alpha=0.3)
+    _save(fig, save_path)
+
+
 def plot_roc_curves(y_true, y_proba, class_names, save_path='results/roc_curves.png'):
     """One-vs-rest ROC curve per emotion."""
     y_bin = label_binarize(y_true, classes=list(range(len(class_names))))

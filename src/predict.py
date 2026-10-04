@@ -17,6 +17,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
 
 from features import extract_features, load_audio, preprocess  # noqa: E402
+from gate import DEFAULT_GATE, SpeechGate  # noqa: E402
 from model import load_bundle  # noqa: E402
 from stress import stress_index, stress_level  # noqa: E402
 
@@ -31,6 +32,7 @@ class Prediction:
     stress_description: str
     audio: np.ndarray
     timeline: tuple[np.ndarray, list[dict[str, float]]] | None = field(default=None)
+    speech_probability: float | None = None
 
     @property
     def emotion(self) -> str:
@@ -38,14 +40,24 @@ class Prediction:
 
 
 class Predictor:
-    def __init__(self, model_path: str | Path = DEFAULT_MODEL):
+    """
+    Emotion + stress prediction. With an embedding model and models/speech_gate.joblib present,
+    clips without speech raise NoSpeechError (a ValueError) instead of getting a made-up emotion.
+    """
+
+    def __init__(self, model_path: str | Path = DEFAULT_MODEL, gate_path: str | Path | None = DEFAULT_GATE):
         self.bundle = load_bundle(model_path)
         self.pipeline = self.bundle['pipeline']
         self.classes = self.bundle['classes']
         self.embedder = None
+        self.gate = None
         if self.bundle['feature_type'] == 'embedding':
             from embeddings import SSLEmbedder
             self.embedder = SSLEmbedder(self.bundle['backbone'], tuple(self.bundle['layers']))
+            if gate_path and Path(gate_path).exists():
+                self.gate = SpeechGate(gate_path)
+                if (self.gate.backbone, list(self.gate.layers)) != (self.bundle['backbone'], list(self.bundle['layers'])):
+                    raise RuntimeError('Speech gate and emotion model were trained on different embeddings.')
 
     def _probs(self, X: np.ndarray) -> list[dict[str, float]]:
         P = self.pipeline.predict_proba(X)
@@ -53,9 +65,11 @@ class Predictor:
 
     def predict_audio(self, y: np.ndarray, timeline: bool = True) -> Prediction:
         """Predict from *preprocessed* 16 kHz audio."""
-        tl = None
+        tl, speech_p = None, None
         if self.embedder is not None:
             x = self.embedder(y)[None]
+            if self.gate is not None:
+                speech_p = self.gate.check(x[0])  # raises NoSpeechError for music / noise / non-speech
             if timeline and len(y) > 16000 * 4:
                 centres, W = self.embedder.windows(y)
                 tl = (centres, self._probs(W))
@@ -64,7 +78,7 @@ class Predictor:
         probs = self._probs(x)[0]
         s = stress_index(probs)
         level, desc = stress_level(s)
-        return Prediction(probs, s, level, desc, y, tl)
+        return Prediction(probs, s, level, desc, y, tl, speech_p)
 
     def predict_file(self, path: str | Path, **kw) -> Prediction:
         return self.predict_audio(load_audio(path), **kw)
@@ -82,7 +96,11 @@ def main():
         sys.stdout.reconfigure(encoding='utf-8')  # bar characters on Windows consoles
     predictor = Predictor(args.model)
     for f in args.files:
-        p = predictor.predict_file(f, timeline=False)
+        try:
+            p = predictor.predict_file(f, timeline=False)
+        except ValueError as e:  # no speech / silent / too short
+            print(f"\n{f}\n  {e}")
+            continue
         print(f"\n{f}\n  emotion: {p.emotion} ({p.probs[p.emotion]:.0%})   stress: {p.stress:.0f}/100 ({p.stress_level})")
         for e, v in sorted(p.probs.items(), key=lambda kv: -kv[1]):
             print(f"    {e:10s} {'█' * int(v * 40):<40s} {v:6.1%}")

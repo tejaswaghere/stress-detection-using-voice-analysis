@@ -36,6 +36,8 @@ audio (mic / file)
   │
   ├─ embed ────── frozen WavLM-base-plus, layers 4–7, mean-pooled → 768-d  src/embeddings.py
   │
+  ├─ speech gate ─ same embedding → "is this speech?" → reject music/noise  src/gate.py
+  │
   ├─ classify ─── StandardScaler → logistic regression → 6 emotion probs   src/model.py
   │               trained on RAVDESS + CREMA-D (115 actors, 8,689 clips)    src/train.py
   │
@@ -100,6 +102,43 @@ Reproduce with `python src/train.py`.
 - **Speakers vary a lot** (46–94% accuracy; 9 of 115 are below 60%), so read any single demo result with that spread in mind.
 - **Male voices score lower** (UAR 73.5% vs 77.3% for female). Adding CREMA-D shrank this gap from 10 points
   (RAVDESS-only) to 4 points.
+
+### Speech gate: no emotions for music, noise or silence
+
+The classifier always picks an emotion, even for non-speech (an early version called a pure tone "sad, 90%").
+A small logistic-regression gate on the **same WavLM embedding** decides first whether a clip contains speech,
+so it adds no extra model and no measurable latency. It was trained on speech, on speech mixed with background
+noise and music (0–10 dB SNR), and on non-speech sounds (`python scripts/train_speech_gate.py`).
+
+| Evaluated on unseen speakers / sound types / noise files | Speech gate | Silero VAD (baseline) |
+|---|---|---|
+| Real speech accepted | **99.97%** | 98.9% |
+| Angry & fearful speech accepted | **99.96%** | 97.5% |
+| Speech with loud background noise (0 dB SNR) accepted | **97.5%** | |
+| Speech in moderate noise (10 dB) / phone-quality speech accepted | **99.8% / 100%** | |
+| Music rejected | **100%** | 98.5% |
+| Synthetic noise and tones rejected | **100%** | 90.5% |
+| Environmental sounds (ESC-50) rejected | 97.7% | 99.4% |
+
+An off-the-shelf voice-activity detector was tried first. At settings that rejected most non-speech, it turned
+away **1.7% of angry and fearful speech**: shouting and panicky voices, exactly what a stress detector must not
+reject. Training the gate on noisy speech was essential too: without it, 30% of real speech in loud noise was rejected.
+Details: [`results/speech_gate/metrics.json`](results/speech_gate/metrics.json).
+
+### Is the confidence trustworthy?
+
+<img src="results/embedding_logreg_ravdess+cremad/reliability.png" alt="Reliability diagram" width="360" align="right">
+
+On speakers recorded like the training data, yes. Expected calibration error is **1.6%**: when the model is
+≥90% confident it's right **95%** of the time, and below 50% it's right only **46%** of the time. The app says
+"low confidence" in that case. Temperature scaling was tested and changed nothing (fitted T = 1.03).
+
+On **unfamiliar recordings it becomes overconfident**. A RAVDESS-trained model is 65% confident on CREMA-D but
+38% accurate (ECE 27%), and the reverse direction is 79% confident but 58% accurate (ECE 21%). So the demo's
+confidence is most meaningful for clean, close-mic speech. This is a known open problem under domain shift,
+and the main reason the model is trained on two corpora.
+
+<br clear="right">
 
 ### Cross-corpus generalisation
 
@@ -179,6 +218,7 @@ python src/train.py --corpora ravdess                # RAVDESS only, 8 emotions
 python src/train.py --corpora ravdess --features handcrafted --model svm \
                     --out models/handcrafted_svm.joblib   # no torch needed
 python src/cross_corpus.py                           # train-on-one / test-on-the-other study
+python scripts/train_speech_gate.py                  # speech vs non-speech gate (downloads ESC-50 clips)
 ```
 
 Embeddings and features are cached in `data/`, so re-runs take seconds. One CREMA-D file (`1076_MTI_SAD_XX.wav`)
@@ -208,6 +248,7 @@ python scripts/build_space.py --push tejaswaghere/stress-detection     # after `
 │   ├── cross_corpus.py # train-on-one, test-on-the-other experiments
 │   ├── embeddings.py   # frozen WavLM embedder (+ sliding windows for the timeline)
 │   ├── model.py        # classifiers and versioned model bundles
+│   ├── gate.py         # speech gate on the WavLM embedding (rejects music / noise / silence)
 │   ├── stress.py       # emotion probabilities → stress index
 │   ├── predict.py      # Predictor used by the CLI and the app
 │   ├── train.py        # speaker-independent training & evaluation
@@ -218,6 +259,7 @@ python scripts/build_space.py --push tejaswaghere/stress-detection     # after `
 ├── demo/index.html     # GitHub Pages demo (calls the Space API)
 ├── scripts/
 │   ├── build_space.py      # assembles the HF Space from src/ + app/
+│   ├── train_speech_gate.py
 │   └── download_cremad.py
 ├── models/emotion_model.joblib
 ├── results/            # metrics.json + plots per model
@@ -233,7 +275,10 @@ python scripts/build_space.py --push tejaswaghere/stress-detection     # after `
   English. Spontaneous speech, other languages and accents, background noise and phone microphones are all harder.
   The cross-corpus results show how much a new recording setup can cost, so real-world accuracy will be below 75%.
 - **Six emotions only.** Calm is folded into neutral and surprised isn't modelled.
-- **Overconfident on unfamiliar audio.** The classifier always picks one of its 6 emotions. For audio unlike its
+- **Noise changes the emotion, not just the confidence.** The speech gate still accepts speech in loud noise, but heavy
+  background noise can shift the predicted emotion (e.g. neutral read as sad). Training the emotion model on
+  noisy speech is the next step.
+- **Overconfident on unfamiliar audio.** The speech gate rejects non-speech, but for speech recorded unlike its
   training data (music, tones, heavy noise) it can still report high confidence.
 - **Stress is inferred, not measured.** Treat it as "tense, negative, high-arousal delivery", not as a diagnosis.
   This is not a medical, HR or lie-detection tool.
@@ -246,10 +291,11 @@ python scripts/build_space.py --push tejaswaghere/stress-detection     # after `
 - [x] Pretrained speech embeddings (WavLM)
 - [x] Emotion timeline for long recordings
 - [x] Second corpus (CREMA-D) and cross-corpus evaluation
+- [x] Speech gate for non-speech audio; calibration measured in- and out-of-domain
 - [ ] Naturalistic speech (MSP-Podcast) and a third held-out corpus for testing
 - [ ] Fine-tune WavLM end to end with speaker-adversarial training
-- [ ] Out-of-distribution detection ("this doesn't sound like speech")
-- [ ] Calibrated confidence (temperature scaling)
+- [ ] Noise-augmented emotion training (the gate already uses it)
+- [ ] Recalibrate confidence under domain shift (e.g. per-user baseline)
 
 ## 📚 References
 

@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented here.
 
+## [v3.2.0] — 2026-10-04
+
+### Added
+- **Speech gate** (`src/gate.py`, `scripts/train_speech_gate.py`): a logistic regression on the WavLM embedding rejects
+  music, noise and other non-speech instead of inventing an emotion. It accepts 99.97% of speech (99.96% of angry or
+  fearful speech) and 97.5% of speech in loud noise, and rejects 100% of music and synthetic audio and 97.7% of
+  environmental sounds, all on unseen sources. Silero VAD was evaluated and rejected: it turned away 1.7% of angry
+  and fearful speech.
+- The app shows a "No clear speech" card. The API returns `speech_detected: false` with a message, and the browser
+  demo displays it.
+- **Calibration analysis:** ECE, reliability diagram, and accuracy at high and low confidence in `train.py`; ECE and mean
+  confidence for every cross-corpus condition. In-domain ECE is 1.6%; cross-corpus it is 21–27% (overconfident).
+- Demo GIF in the README.
+
+### Fixed
+- Browser demo resampled audio with linear interpolation (aliasing), which flipped borderline predictions. It now
+  sends native-rate audio and the server resamples.
+- Space deploy: short description now fits Hugging Face's 60-character limit.
+
 ## [v3.1.0] — 2026-10-04
 
 ### Added

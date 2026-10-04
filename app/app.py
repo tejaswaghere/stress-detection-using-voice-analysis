@@ -24,6 +24,7 @@ ROOT = HERE.parent if (HERE.parent / 'src').exists() else HERE  # repo layout or
 sys.path.insert(0, str(ROOT / 'src'))
 
 from features import SAMPLE_RATE, describe_audio  # noqa: E402
+from gate import NoSpeechError  # noqa: E402
 from predict import Predictor  # noqa: E402
 from stress import STRESS_WEIGHTS  # noqa: E402
 
@@ -134,15 +135,22 @@ def analyze(audio_path):
         raise gr.Error('Record or upload some audio first.')
     try:
         pred = predictor.predict_file(audio_path)
+    except NoSpeechError as e:  # music / noise / non-speech: say so instead of inventing an emotion
+        card = (f'<div class="card"><div class="emo"><div class="emo-icon">🔇</div><div>'
+                f'<div class="emo-label">No clear speech</div><div class="emo-conf">{e}</div></div></div></div>')
+        return card, None, None, '', {'speech_detected': False, 'message': str(e)}
     except ValueError as e:  # silent / too short
         raise gr.Error(str(e))
     api = {
+        'speech_detected': True,
         'emotion': pred.emotion,
         'confidence': round(pred.probs[pred.emotion], 4),
         'probabilities': {k: round(v, 4) for k, v in pred.probs.items()},
         'stress_index': round(pred.stress, 1),
         'stress_level': pred.stress_level,
     }
+    if pred.speech_probability is not None:
+        api['speech_probability'] = round(pred.speech_probability, 4)
     labels = {f'{EMOJI[k]} {k}': v for k, v in pred.probs.items()}
     info = describe_audio(pred.audio)
     return result_card(pred), labels, analysis_plot(pred, info), acoustics_md(info), api
@@ -202,6 +210,10 @@ ABOUT_MD = f"""
   is why this model is trained on both. Your microphone and room are another new "corpus", so expect lower accuracy than above.
 - **Acted speech:** both datasets use actors performing fixed sentences in North-American English. Natural,
   subtle speech, other languages, background noise and phone mics are all harder.
+- **Non-speech is rejected:** a speech gate on the same embedding refuses music, noise and silence instead of
+  guessing. Loud background noise can still shift the emotion it reports.
+- **Confidence:** on clean speech like the training data, ≥90% confidence is right 95% of the time; on unfamiliar
+  recordings the model tends to be overconfident.
 - **"Stress" is derived, not measured** — neither dataset has stress labels. Treat the index as an indicator of tense,
   negative-arousal vocal delivery, not a diagnosis. **Not a medical or HR tool.**
 - Audio is processed in memory to make the prediction and is not stored by this app.

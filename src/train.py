@@ -120,6 +120,9 @@ def main():
         'accuracy_fold_std': round(float(np.std(fold_acc)), 4),
         'uar': round(float(balanced_accuracy_score(y, oof_pred)), 4),
         'macro_f1': round(float(f1_score(y, oof_pred, average='macro')), 4),
+        'ece': round(evaluate.expected_calibration_error(y, oof_proba), 4),
+        'accuracy_when_confidence_ge_0.9': round(float(np.mean((oof_pred == y)[oof_proba.max(1) >= 0.9])), 4),
+        'accuracy_when_confidence_lt_0.5': round(float(np.mean((oof_pred == y)[oof_proba.max(1) < 0.5])), 4),
         'accuracy_random_split_leaky': round(float(accuracy_score(y, leaky)), 4),
         'per_class_f1': {e: round(report[e]['f1-score'], 4) for e in labels},
         'per_corpus': {c: {'accuracy': round(float(accuracy_score(y[source == c], oof_pred[source == c])), 4),
@@ -142,6 +145,7 @@ def main():
     res.mkdir(parents=True, exist_ok=True)
     evaluate.plot_confusion_matrix(y, oof_pred, labels, res / 'confusion_matrix.png')
     evaluate.plot_roc_curves(y, oof_proba, labels, res / 'roc_curves.png')
+    evaluate.plot_reliability(y, oof_proba, res / 'reliability.png')
     evaluate.plot_per_speaker_accuracy(speakers, sex, y, oof_pred, res / 'per_speaker_accuracy.png',
                                        chance=1 / len(labels))
 

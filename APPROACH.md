@@ -119,6 +119,29 @@ depend on recording conditions, so that is what ships.
 **Data quality.** One CREMA-D file (`1076_MTI_SAD_XX.wav`) is silent. The extractor skips unusable clips and
 lists them in the cache, and it checkpoints every 500 clips. The first full run crashed on that file after 16 minutes.
 
+## Lesson 4: refuse to answer when the input isn't speech (v3.2)
+
+**Speech gate.** The classifier always outputs an emotion, so non-speech gets confident nonsense. First attempt: Silero
+VAD. Its frame-level speech probabilities were collected for every clip and a grid of rules was swept (frame threshold
+× minimum speech duration). No setting got both jobs right: rules that rejected 97–99% of music and environmental
+sounds also rejected 1.7–2.5% of *angry and fearful* speech, because shouting and panicky delivery look unlike
+the conversational speech a VAD is tuned for.
+
+Second attempt: a logistic regression on the WavLM embedding the emotion model already computes. With grouped
+cross-validation (no speaker, sound category or music track in both train and test) it accepted 99.95% of speech and
+rejected 100% of non-speech. But a robustness test on held-out speakers with *unseen* noise files showed it rejected
+5.5% of speech at 10 dB SNR and 30% at 0 dB: it had learned "clean studio audio = speech". Adding 2,400 copies of
+speech mixed with background sounds and music (0–10 dB SNR) as positives fixed that (99.75% / 97.5% accepted) at a
+small cost on environmental sounds (100% → 97.7% rejected).
+
+**Calibration.** On unseen speakers from the training corpora the model is already well calibrated (ECE 1.6%; temperature
+scaling fitted T = 1.03 and changed nothing, so it isn't used). Across corpora calibration collapses (ECE 21–27%:
+79% confident, 58% correct). The honest takeaway: the confidence shown in the app is meaningful for audio resembling
+the training data and optimistic otherwise. The UI therefore hedges below 50% confidence, where accuracy is 46%.
+
+**Remaining gap.** The gate is noise-robust, but the emotion model isn't: at 5 dB SNR a neutral clip read as sad. Noise
+augmentation for the emotion model is the obvious next step.
+
 ## Stress index
 
 RAVDESS has no stress labels, so stress is a function of the emotion posterior. On the circumplex model,
