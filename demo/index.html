@@ -124,7 +124,7 @@
   <section class="card">
     <details>
       <summary>How it works & limitations</summary>
-      <p>Your audio is converted to 16 kHz mono in the browser and sent to the model on
+      <p>Your audio is converted to mono in the browser and sent to the model on
         <a id="space-link" href="https://huggingface.co/spaces/tejaswaghere/stress-detection">Hugging Face Spaces</a>.
         There, silence is trimmed and volume normalised. A frozen <strong>WavLM</strong> speech model turns the audio
         into an embedding, and a linear classifier trained on <strong>RAVDESS + CREMA-D</strong> (115 actors) outputs
@@ -151,7 +151,7 @@ import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client@2.7.1/dist/b
 // ?space=owner/name or ?space=http://127.0.0.1:7860/ for local testing
 const SPACE = new URLSearchParams(location.search).get("space") || "tejaswaghere/stress-detection";
 const EMOJI = { neutral: "😐", calm: "😌", happy: "😊", sad: "😢", angry: "😠", fearful: "😨", disgust: "🤢", surprised: "😲" };
-const TARGET_SR = 16000, MAX_SECONDS = 30;
+const MAX_SECONDS = 30;
 
 const $ = (id) => document.getElementById(id);
 const recBtn = $("rec-btn"), statusEl = $("status"), canvas = $("wave"), ctx2d = canvas.getContext("2d");
@@ -173,25 +173,31 @@ async function getClient() {
 }
 getClient().then(() => setStatus("Model ready.")).catch(() => { client = null; setStatus(""); });
 
-// ── Audio → 16 kHz mono WAV ──────────────────────────────────────────────────
+// ── Audio → mono WAV at its original sample rate ────────────────────────────
+// No resampling here on purpose: browsers resample AudioBuffers by linear interpolation
+// without an anti-aliasing filter, which folds high frequencies into the speech band and
+// changed predictions on borderline clips (a sad clip read as happy 64%). The server
+// resamples to 16 kHz properly, exactly as in training.
 async function toWav(blob) {
   const ac = new (window.AudioContext || window.webkitAudioContext)();
   const decoded = await ac.decodeAudioData(await blob.arrayBuffer());
   ac.close();
-  const n = Math.min(Math.ceil(decoded.duration * TARGET_SR), MAX_SECONDS * TARGET_SR);
-  const off = new OfflineAudioContext(1, n, TARGET_SR);
-  const src = off.createBufferSource();
-  src.buffer = decoded; src.connect(off.destination); src.start();
-  const pcm = (await off.startRendering()).getChannelData(0);
+  const sr = decoded.sampleRate;
+  const n = Math.min(decoded.length, MAX_SECONDS * sr);
+  const pcm = new Float32Array(n);
+  for (let c = 0; c < decoded.numberOfChannels; c++) {
+    const ch = decoded.getChannelData(c);
+    for (let i = 0; i < n; i++) pcm[i] += ch[i] / decoded.numberOfChannels;
+  }
 
-  const buf = new ArrayBuffer(44 + pcm.length * 2), v = new DataView(buf);
+  const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
   const w = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
-  w(0, "RIFF"); v.setUint32(4, 36 + pcm.length * 2, true); w(8, "WAVE"); w(12, "fmt ");
+  w(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); w(8, "WAVE"); w(12, "fmt ");
   v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
-  v.setUint32(24, TARGET_SR, true); v.setUint32(28, TARGET_SR * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
-  w(36, "data"); v.setUint32(40, pcm.length * 2, true);
-  for (let i = 0; i < pcm.length; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, pcm[i])) * 0x7fff, true);
-  return { wav: new Blob([buf], { type: "audio/wav" }), pcm };
+  v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  w(36, "data"); v.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, pcm[i])) * 0x7fff, true);
+  return { wav: new Blob([buf], { type: "audio/wav" }), pcm, sr };
 }
 
 function drawStatic(pcm) {
@@ -211,9 +217,9 @@ function drawStatic(pcm) {
 async function analyze(blob) {
   try {
     setStatus("Preparing audio…", { busy: true });
-    const { wav, pcm } = await toWav(blob);
+    const { wav, pcm, sr } = await toWav(blob);
     drawStatic(pcm);
-    if (pcm.length < TARGET_SR * 0.5) throw new Error("That clip is too short. Please record at least 2 seconds.");
+    if (pcm.length < sr * 0.5) throw new Error("That clip is too short. Please record at least 2 seconds.");
     const c = await getClient();
     setStatus("Analysing…", { busy: true });
     const res = await c.predict("/analyze", { audio_path: wav });
